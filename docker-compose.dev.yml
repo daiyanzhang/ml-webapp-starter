@@ -1,0 +1,161 @@
+services:
+  # 数据库
+  postgres:
+    image: postgres:15-alpine
+    environment:
+      POSTGRES_DB: webapp_starter
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # 后端调试服务器
+  backend-debug:
+    build: 
+      context: ./backend
+      dockerfile: Dockerfile.debug
+    environment:
+      POSTGRES_SERVER: postgres
+      POSTGRES_PORT: 5432
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: webapp_starter
+    ports:
+      - "8000:8000"  # FastAPI服务
+      - "5678:5678"  # debugpy远程调试端口
+    depends_on:
+      postgres:
+        condition: service_healthy
+    volumes:
+      - ./backend:/app
+      - ./scripts:/scripts
+    stdin_open: true
+    tty: true
+
+  # 前端开发服务器
+  frontend:
+    build: 
+      context: ./frontend
+      dockerfile: Dockerfile.dev
+    ports:
+      - "3000:3000"
+    volumes:
+      - ./frontend:/app
+      - /app/node_modules
+    environment:
+      - CHOKIDAR_USEPOLLING=true
+      - FAST_REFRESH=true
+    command: ["sh", "-c", "npm run dev -- --config vite.config.dev.js --host 0.0.0.0 --port 3000"]
+    depends_on:
+      - backend-debug
+
+  # Storybook组件库文档
+  storybook:
+    build: 
+      context: ./frontend
+      dockerfile: Dockerfile.dev
+    ports:
+      - "6006:6006"
+    volumes:
+      - ./frontend:/app
+      - /app/node_modules
+    environment:
+      - CHOKIDAR_USEPOLLING=true
+    command: ["sh", "-c", "npm run storybook -- --host 0.0.0.0 --port 6006"]
+
+  # Temporal服务器 - 用于后台任务处理
+  temporal:
+    image: temporalio/auto-setup:1.24.2
+    ports:
+      - "7233:7233"   # gRPC端口
+      - "8233:8233"   # HTTP端口
+    environment:
+      - DB=postgres12
+      - DB_PORT=5432
+      - POSTGRES_USER=postgres
+      - POSTGRES_PWD=postgres
+      - POSTGRES_SEEDS=postgres
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  # Temporal Web UI - 管理界面
+  temporal-web:
+    image: temporalio/ui:2.28.0
+    ports:
+      - "8080:8080"
+    environment:
+      - TEMPORAL_ADDRESS=temporal:7233
+      - TEMPORAL_CORS_ORIGINS=http://localhost:3000
+    depends_on:
+      - temporal
+
+  # Temporal Worker - 后台任务处理器
+  temporal-worker:
+    build: 
+      context: ./backend
+      dockerfile: Dockerfile.debug
+    environment:
+      POSTGRES_SERVER: postgres
+      POSTGRES_PORT: 5432
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: webapp_starter
+      TEMPORAL_HOST: temporal:7233
+    volumes:
+      - ./backend:/app
+      - ./scripts:/scripts
+    command: ["sh", "-c", "cd /app && python -m app.temporal_worker"]
+    depends_on:
+      - postgres
+      - temporal
+    restart: unless-stopped
+
+  # Ray Head Node - 分布式计算集群头节点
+  ray-head:
+    image: rayproject/ray:2.30.0-py39
+    ports:
+      - "8265:8265"   # Ray Dashboard
+      - "10001:10001" # Ray Client Server
+      - "5679:5679"   # Ray Job Debug Port
+    volumes:
+      - ./ray-jobs:/app/ray-jobs
+    environment:
+      - RAY_HEAD_SERVICE_HOST=ray-head
+    command: >
+      bash -c "
+        ray start --head --dashboard-host=0.0.0.0 --dashboard-port=8265 --port=6379 --temp-dir=/tmp/ray --disable-usage-stats &&
+        sleep infinity
+      "
+    healthcheck:
+      test: ["CMD", "python", "-c", "import socket; s=socket.socket(); s.settimeout(1); s.connect(('localhost', 8265)); s.close()"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+
+  # Ray Worker Node - 分布式计算工作节点（可选）
+  ray-worker:
+    image: rayproject/ray:2.30.0-py39
+    volumes:
+      - ./ray-jobs:/app/ray-jobs
+    environment:
+      - RAY_HEAD_SERVICE_HOST=ray-head
+    command: >
+      bash -c "
+        ray start --address=ray-head:6379 --temp-dir=/tmp/ray --disable-usage-stats &&
+        sleep infinity
+      "
+    depends_on:
+      ray-head:
+        condition: service_healthy
+    scale: 2  # 启动2个worker节点
+
+volumes:
+  postgres_data:

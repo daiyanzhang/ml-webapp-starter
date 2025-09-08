@@ -1,0 +1,32 @@
+FROM python:3.11-slim
+
+WORKDIR /app
+
+# 安装系统依赖
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends \
+    postgresql-client \
+    build-essential \
+    && rm -rf /var/lib/apt/lists/*
+
+# 复制依赖文件
+COPY requirements.txt .
+COPY requirements-dev.txt .
+
+# 安装Python依赖（包括调试工具）
+RUN pip install --no-cache-dir -r requirements.txt
+RUN pip install --no-cache-dir -r requirements-dev.txt
+
+# 复制应用代码
+COPY . .
+
+# 创建非root用户
+RUN useradd --create-home --shell /bin/bash app \
+    && chown -R app:app /app
+USER app
+
+# 暴露端口 (8000: FastAPI, 5678: debugpy)
+EXPOSE 8000 5678
+
+# 启动调试服务器
+CMD ["python", "-m", "debugpy", "--listen", "0.0.0.0:5678", "debug_server.py"]

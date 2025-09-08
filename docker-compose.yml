@@ -1,0 +1,67 @@
+services:
+  # 数据库
+  postgres:
+    image: postgres:15-alpine
+    environment:
+      POSTGRES_DB: webapp_starter
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # 后端API
+  backend:
+    build: ./backend
+    environment:
+      POSTGRES_SERVER: postgres
+      POSTGRES_PORT: 5432
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: webapp_starter
+    ports:
+      - "8000:8000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    volumes:
+      - ./backend:/app
+      - ./scripts:/scripts
+    command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
+
+  # 前端
+  frontend:
+    build: 
+      context: ./frontend
+      dockerfile: Dockerfile
+    ports:
+      - "3000:80"
+    depends_on:
+      - backend
+
+  # 开发用前端 (可选)
+  frontend-dev:
+    build: 
+      context: ./frontend
+      dockerfile: Dockerfile.dev
+    ports:
+      - "3001:3000"
+    volumes:
+      - ./frontend:/app
+      - /app/node_modules
+    environment:
+      - CHOKIDAR_USEPOLLING=true  # 在Docker中启用文件监听
+      - FAST_REFRESH=true        # 启用React Fast Refresh
+    depends_on:
+      - backend
+    profiles:
+      - dev
+
+volumes:
+  postgres_data:
