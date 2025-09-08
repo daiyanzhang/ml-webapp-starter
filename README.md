@@ -63,6 +63,64 @@ A **production-ready full-stack web application starter** designed for **AI mode
 - **[Kubernetes](https://kubernetes.io)**: Container orchestration
 - **[GitHub Actions](https://github.com/features/actions)**: CI/CD automation
 
+## 🏛️ System Architecture
+
+```
+┌─────────────────────────────────────────────────────────────────────────────────┐
+│                              Frontend Layer                                     │
+├─────────────────────────────────────────────────────────────────────────────────┤
+│  React 18 + Ant Design + Vite                                                  │
+│  • User Interface & Dashboard                                                   │
+│  • Component Library (Storybook)                                               │
+│  • State Management (Zustand + React Query)                                    │
+└─────────────────┬───────────────────────────────────────┬───────────────────────┘
+                  │                                       │
+                  │ HTTP/REST API                         │ WebSocket (optional)
+                  │                                       │
+┌─────────────────▼───────────────────────────────────────▼───────────────────────┐
+│                              Backend Layer                                      │
+├─────────────────────────────────────────────────────────────────────────────────┤
+│  FastAPI + Pydantic + SQLAlchemy 2.0                                           │
+│  • REST API Endpoints                                                           │
+│  • JWT Authentication & Authorization                                           │
+│  • Data Validation & Serialization                                             │
+│  • Async Database Operations                                                    │
+└─────────────┬─────────────────────────────┬─────────────────────────────────────┘
+              │                             │
+              │ Database Queries            │ Workflow Execution
+              │                             │
+┌─────────────▼─────────────┐    ┌─────────▼───────────────────────────────────────┐
+│     Data Layer            │    │           Workflow Layer                        │
+├───────────────────────────┤    ├─────────────────────────────────────────────────┤
+│  PostgreSQL Database      │    │  Temporal Workflow Engine                      │
+│  • User Data              │    │  • Complex Business Logic                      │
+│  • Application State      │    │  • Long-running Processes                      │
+│  • Metadata & Logs        │    │  • Error Handling & Retry                      │
+│  • ACID Transactions      │    │  • Workflow Orchestration                      │
+└───────────────────────────┘    └─────────────────────────────────────────────────┘
+                                                          │
+                                                          │ Distributed Tasks
+                                                          │
+                                 ┌─────────────────────────▼─────────────────────────┐
+                                 │           Computing Layer                          │
+                                 ├─────────────────────────────────────────────────────┤
+                                 │  Ray Distributed Computing Framework              │
+                                 │  • Multi-node Task Execution                      │
+                                 │  • Resource Management                            │
+                                 │  • Parallel Processing                            │
+                                 │  • Scalable Compute Workloads                     │
+                                 └─────────────────────────────────────────────────────┘
+```
+
+### Architecture Highlights
+
+- **🎯 Frontend-First**: Single entry point through React application
+- **⚡ Async Backend**: High-performance FastAPI with async database operations
+- **🔄 Workflow Engine**: Temporal for complex business process orchestration
+- **🚀 Distributed Computing**: Ray cluster for scalable parallel processing
+- **📊 Persistent Storage**: PostgreSQL for reliable data persistence
+- **🔒 Security**: JWT authentication with role-based access control
+
 ## 📁 Project Structure
 
 ```
@@ -87,6 +145,13 @@ webapp-starter/
 │   │   └── workflows/      # Temporal workflow definitions
 │   ├── alembic/            # Database migrations
 │   └── requirements.txt
+├── ⚡ ray-jobs/            # Ray distributed computing jobs
+│   ├── simple_job.py       # Basic Ray job examples
+│   ├── data_processing_job.py  # Data processing workflows examples
+│   ├── machine_learning_job.py # ML training and inference jobs examples
+│   ├── ray_job_decorator.py    # Job management utilities
+│   ├── debug_utils.py      # Ray debugging and monitoring tools
+│   └── README.md           # Ray jobs documentation
 ├── 🐳 deployment/          # Deployment configurations
 │   ├── docker/             # Docker configurations
 │   └── k8s/               # Kubernetes manifests
