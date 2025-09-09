@@ -158,5 +158,19 @@ services:
         condition: service_healthy
     scale: 2  # 启动2个worker节点
 
+  # Jupyter Notebook 服务
+  jupyter:
+    image: jupyter/minimal-notebook:latest
+    ports:
+      - "8888:8888"
+    volumes:
+      - ./notebooks:/home/jovyan/work
+    environment:
+      - JUPYTER_ENABLE_LAB=yes
+      - JUPYTER_TOKEN=webapp-starter-token
+      - GRANT_SUDO=yes
+    user: root
+    command: start-notebook.sh --NotebookApp.token='webapp-starter-token' --NotebookApp.password='' --NotebookApp.allow_root=True --NotebookApp.disable_check_xsrf=True
+
 volumes:
   postgres_data:

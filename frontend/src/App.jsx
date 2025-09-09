@@ -7,6 +7,7 @@ import DashboardPage from './pages/DashboardPage'
 import UsersPage from './pages/UsersPage'
 import WorkflowsPage from './pages/WorkflowsPage'
 import RayJobsPage from './pages/RayJobsPage'
+import NotebooksPage from './pages/NotebooksPage'
 import ProtectedRoute from './components/ProtectedRoute'
 
 const { Content } = Layout
@@ -26,6 +27,7 @@ function App() {
                 <Route path="/users" element={<UsersPage />} />
                 <Route path="/workflows" element={<WorkflowsPage />} />
                 <Route path="/ray-jobs" element={<RayJobsPage />} />
+                <Route path="/notebooks" element={<NotebooksPage />} />
               </Routes>
             </AppLayout>
           </ProtectedRoute>

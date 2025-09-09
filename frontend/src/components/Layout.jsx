@@ -14,6 +14,7 @@ import {
   BranchesOutlined,
   NodeIndexOutlined,
   ThunderboltOutlined,
+  RocketOutlined,
 } from '@ant-design/icons'
 
 import useAuthStore from '../store/useAuthStore'
@@ -49,6 +50,11 @@ const AppLayout = ({ children }) => {
       label: 'Ray分布式计算',
     },
     {
+      key: '/notebooks',
+      icon: <RocketOutlined />,
+      label: 'Jupyter Notebooks',
+    },
+    {
       key: 'developer',
       icon: <CodeOutlined />,
       label: '开发者工具',
@@ -73,6 +79,11 @@ const AppLayout = ({ children }) => {
           icon: <ThunderboltOutlined />,
           label: 'Ray Dashboard',
         },
+        {
+          key: 'jupyter-lab',
+          icon: <RocketOutlined />,
+          label: 'Jupyter Lab',
+        },
       ],
     },
   ]
@@ -93,6 +104,10 @@ const AppLayout = ({ children }) => {
     }
     if (key === 'ray-dashboard') {
       window.open('http://localhost:8265', '_blank')
+      return
+    }
+    if (key === 'jupyter-lab') {
+      window.open('http://localhost:8888?token=webapp-starter-token', '_blank')
       return
     }
     
