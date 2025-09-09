@@ -11,15 +11,13 @@ import os
 from datetime import datetime
 from typing import Dict, Any
 
-# 导入装饰器和调试工具
-from ray_job_decorator import ray_job_monitor
+# 导入调试工具（可选）
 from debug_utils import (
     log_info,
     log_error,
     debug_print,
     progress_tracker,
     measure_execution_time,
-    get_job_context,
 )
 
 
@@ -185,21 +183,21 @@ def compute_fibonacci_core(n: int) -> Dict[str, Any]:
 # === Ray Job入口函数 ===
 
 
-@ray_job_monitor(api_base_url="http://backend:8000")
 def main():
     """Ray Job入口函数 - 只负责参数解析和调用核心逻辑"""
-    # 获取任务上下文
-    context = get_job_context()
-    log_info("Ray Job started", **context)
+    # 从环境变量获取参数（由 github_job_runner 传递）
+    job_id = os.environ.get("RAY_JOB_ID", "unknown")
+    task_type = os.environ.get("RAY_JOB_TYPE", "fibonacci")  # 默认斐波那契
+    params_str = os.environ.get("RAY_JOB_CONFIG", "{}")
+    
+    log_info("Ray Job started", job_id=job_id, task_type=task_type)
 
     # 解析参数
     try:
-        params = json.loads(context["task_params"])
+        params = json.loads(params_str)
     except:
         params = {}
         log_error("Failed to parse task parameters, using defaults")
-
-    task_type = context["task_type"]
     debug_print("Parsed parameters", {"task_type": task_type, "params": params})
 
     # 确保Ray已初始化
@@ -234,11 +232,11 @@ def main():
 
     # 构建最终结果
     final_result = {
-        "job_id": context["job_id"],
+        "job_id": job_id,
         "task_type": task_type,
         "parameters": params,
         "result": task_result,
-        "timestamp": context["timestamp"],
+        "timestamp": datetime.now().isoformat(),
         "status": "completed" if "error" not in task_result else "failed",
     }
 

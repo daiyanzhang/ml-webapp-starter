@@ -3,7 +3,7 @@ Temporal服务 - 工作流管理
 """
 import uuid
 from typing import Any, Dict, List
-from datetime import datetime
+from datetime import datetime, timezone
 from temporalio.client import Client
 from temporalio.common import WorkflowIDReusePolicy
 from temporalio.service import WorkflowService
@@ -224,9 +224,41 @@ class TemporalService:
         try:
             handle = self.client.get_workflow_handle(workflow_id)
             await handle.cancel()
+            
+            # 更新数据库中的工作流状态
+            await self._update_workflow_status_in_db(workflow_id, "cancelled")
+            
             return True
-        except Exception:
+        except Exception as e:
+            print(f"Failed to cancel workflow {workflow_id}: {e}")
             return False
+    
+    async def _update_workflow_status_in_db(self, workflow_id: str, status: str):
+        """更新数据库中的工作流状态"""
+        from app.core.database import SessionLocal
+        from app.db.models import TemporalWorkflow
+        
+        db = SessionLocal()
+        try:
+            # 查找工作流记录
+            workflow = db.query(TemporalWorkflow).filter(
+                TemporalWorkflow.workflow_id == workflow_id
+            ).first()
+            
+            if workflow:
+                workflow.status = status
+                if status in ["cancelled", "failed", "completed"]:
+                    workflow.completed_at = datetime.now(timezone.utc)
+                db.commit()
+                print(f"Updated workflow {workflow_id} status to {status}")
+            else:
+                print(f"Workflow {workflow_id} not found in database")
+                
+        except Exception as e:
+            print(f"Failed to update workflow status in database: {e}")
+            db.rollback()
+        finally:
+            db.close()
 
 
 # 单例服务实例

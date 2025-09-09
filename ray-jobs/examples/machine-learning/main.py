@@ -18,9 +18,8 @@ from sklearn.svm import SVC
 from sklearn.model_selection import train_test_split
 from sklearn.metrics import accuracy_score, classification_report
 
-# 导入装饰器和调试工具
-from ray_job_decorator import ray_job_monitor
-from debug_utils import log_info, log_error, get_job_context
+# 导入调试工具（可选）
+from debug_utils import log_info, log_error
 
 
 @ray.remote
@@ -97,7 +96,6 @@ def train_model(
     return result
 
 
-@ray_job_monitor(api_base_url="http://backend:8000")
 def main():
     """主函数 - 作为独立Ray Job运行"""
     # 从环境变量获取参数

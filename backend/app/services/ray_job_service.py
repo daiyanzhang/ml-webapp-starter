@@ -185,41 +185,18 @@ class RayJobService:
         """
         
         try:
-            # 1. 克隆GitHub仓库
-            logger.info(f"Job {job_id}: Cloning repository {job_request.github_repo}")
-            repo_path = await github_service.clone_public_repo(
-                job_request.github_repo,
-                job_request.branch,
-                job_request.commit_sha
-            )
-            
-            # 2. 验证仓库结构
-            validation = await github_service.validate_repository_structure(
-                repo_path, 
-                job_request.entry_point
-            )
-            
-            if not validation["valid"]:
-                error_msg = f"Repository validation failed: {', '.join(validation['errors'])}"
-                self._update_db_job(job_id, 
-                                  status="failed",
-                                  error_message=error_msg,
-                                  completed_at=datetime.now())
-                await github_service.cleanup_repository(repo_path)
-                logger.error(f"Job {job_id}: {error_msg}")
-                return
-            
-            # 3. 提交Ray作业
+            # 直接提交Ray作业 - GitHub仓库操作在Ray任务内部完成
             logger.info(f"Job {job_id}: Submitting to Ray cluster")
             
-            # 执行作业并获取Ray job ID
+            # 执行作业并获取Ray job ID - 直接传递 GitHub 仓库信息
             result, ray_job_id = await self._execute_ray_job(
                 job_id=job_id,
-                repo_path=repo_path,
+                github_repo=job_request.github_repo,
+                branch=job_request.branch,
+                commit_sha=job_request.commit_sha,
                 entry_point=job_request.entry_point,
                 config=job_request.config,
-                job_config=job_request.job_config,
-                template_type=job_request.template_type
+                job_config=job_request.job_config
             )
             
             # 更新数据库状态为pending，dashboard链接由前端拼接
@@ -229,9 +206,6 @@ class RayJobService:
             
             logger.info(f"Job {job_id}: Ray job {ray_job_id} submitted, status set to pending")
             
-            # 5. 清理临时文件
-            await github_service.cleanup_repository(repo_path)
-            
         except Exception as e:
             error_msg = str(e)
             self._update_db_job(job_id,
@@ -239,61 +213,46 @@ class RayJobService:
                               error_message=error_msg,
                               completed_at=datetime.now())
             logger.error(f"Job {job_id}: Failed - {error_msg}")
-            
-            # 尝试清理，但不再抛出异常影响其他作业
-            try:
-                if 'repo_path' in locals():
-                    await github_service.cleanup_repository(repo_path)
-            except:
-                pass
     
     async def _execute_ray_job(
         self,
         job_id: str,
-        repo_path: str,
+        github_repo: str,
+        branch: str,
+        commit_sha: str,
         entry_point: str,
         config: Dict[str, Any],
-        job_config: JobConfig,
-        template_type: str
+        job_config: JobConfig
     ) -> tuple[Any, Optional[str]]:
-        """执行Ray作业"""
+        """执行Ray作业 - 使用通用的 GitHub job runner"""
         
-        # 准备运行时环境 - 将整个仓库目录作为working_dir
+        # 构建运行时环境 - 回到原来的 working_dir 方式
         runtime_env = {
-            "working_dir": repo_path
+            "working_dir": "/app/ray-jobs"  # 使用容器内的挂载路径
         }
         
-        # 检查requirements.txt位置（先检查entry point目录，再检查根目录）
-        entry_dir = os.path.join(repo_path, os.path.dirname(entry_point))
-        requirements_locations = [
-            os.path.join(entry_dir, "requirements.txt"),  # entry point目录
-            os.path.join(repo_path, "requirements.txt")   # 根目录
-        ]
+        # 设置环境变量传递 GitHub 仓库信息和任务配置
+        runtime_env["env_vars"] = {
+            "RAY_JOB_CONFIG": json.dumps(config),
+            "RAY_JOB_ID": job_id,
+            "RAY_JOB_TYPE": "github_job",
+            "GITHUB_REPO": github_repo,
+            "GITHUB_BRANCH": branch,
+            "ENTRY_POINT": entry_point,
+            "PYTHONPATH": "./ray-jobs:$PYTHONPATH"
+        }
         
-        for req_path in requirements_locations:
-            if os.path.exists(req_path):
-                runtime_env["pip"] = req_path
-                break
+        # 如果指定了 commit，添加到环境变量
+        if commit_sha:
+            runtime_env["env_vars"]["GITHUB_COMMIT"] = commit_sha
         
-        # 不再硬编码py_modules，而是通过PYTHONPATH让Python自然找到依赖
-        
-        # 不再需要创建executor，直接使用Job Submission API
-        
-        # 提交Ray Job (使用Job Submission API)
+        # 提交Ray Job - 使用通用的 GitHub runner
         try:
             # 连接到Ray集群
             client = JobSubmissionClient("http://ray-head:8265")
             
-            # 设置环境变量传递配置
-            runtime_env["env_vars"] = {
-                "RAY_JOB_CONFIG": json.dumps(config),
-                "RAY_JOB_ID": job_id,
-                "RAY_JOB_TYPE": template_type,
-                "PYTHONPATH": "./ray-jobs:$PYTHONPATH"  # 将ray-jobs目录添加到Python路径
-            }
-            
-            # 直接执行用户的Python文件
-            entrypoint = f"python {entry_point}"
+            # 使用通用的 GitHub job runner
+            entrypoint = "python github_job_runner.py"
             
             # 异步提交job
             loop = asyncio.get_event_loop()
@@ -306,12 +265,12 @@ class RayJobService:
                 )
             )
             
-            logger.info(f"Submitted Ray job {job_submission_id} for internal job {job_id}")
+            logger.info(f"Submitted GitHub job {job_submission_id} for internal job {job_id}")
             
             # 异步提交完成，立即返回
-            return {"success": True, "message": "Ray job submitted successfully"}, job_submission_id
+            return {"success": True, "message": "GitHub job submitted successfully"}, job_submission_id
         except Exception as e:
-            logger.error(f"Ray job execution failed: {str(e)}")
+            logger.error(f"GitHub job execution failed: {str(e)}")
             raise
     
     async def get_job_status(self, job_id: str) -> Optional[JobStatus]:

@@ -36,6 +36,7 @@ services:
     volumes:
       - ./backend:/app
       - ./scripts:/scripts
+      - ./ray-jobs:/app/ray-jobs
     stdin_open: true
     tty: true
 

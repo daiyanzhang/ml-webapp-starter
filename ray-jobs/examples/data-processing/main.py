@@ -13,9 +13,8 @@ import numpy as np
 from datetime import datetime
 from typing import Dict, Any, List
 
-# 导入调试工具
-from debug_utils import log_info, log_error, get_job_context
-from ray_job_decorator import ray_job_monitor
+# 导入调试工具（可选）
+from debug_utils import log_info, log_error
 
 
 @ray.remote
@@ -65,7 +64,6 @@ def generate_sample_data(size: int, seed: int = None) -> List[float]:
     return data
 
 
-@ray_job_monitor(api_base_url="http://backend:8000")
 def main():
     """主函数 - 作为独立Ray Job运行"""
     # 从环境变量获取参数

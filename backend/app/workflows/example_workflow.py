@@ -32,7 +32,7 @@ class ExampleWorkflow:
     """示例工作流"""
 
     @workflow.run
-    async def run(self, user_id: int, action: str) -> dict:
+    async def run(self, user_id: int = 1, action: str = "default") -> dict:
         """
         执行示例工作流
         

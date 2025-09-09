@@ -538,12 +538,12 @@ const RayJobsPage = () => {
               {selectedJob.completed_at && (
                 <Descriptions.Item label="Completed">{new Date(selectedJob.completed_at).toLocaleString()}</Descriptions.Item>
               )}
-              {selectedJob.dashboard_url && (
+              {selectedJob.ray_job_id && (
                 <Descriptions.Item label="Ray Dashboard">
                   <Button 
                     type="link" 
                     icon={<GithubOutlined />}
-                    onClick={() => window.open(selectedJob.dashboard_url, '_blank')}
+                    onClick={() => window.open(`http://localhost:8265/#/jobs/${selectedJob.ray_job_id}`, '_blank')}
                   >
                     View Logs & Metrics
                   </Button>
