@@ -61,7 +61,7 @@ tell application "iTerm"
     
     -- 设置Backend会话
     tell backendSession
-        write text "cd '$CURRENT_DIR' && echo '🐍 BACKEND LOGS (Port 8000)' && echo '════════════════════════════════════════════════════════════════════════════════' && docker-compose -f docker-compose.dev.yml logs -f backend-debug"
+        write text "cd '$CURRENT_DIR' && echo '🐍 BACKEND LOGS (Port 8000)' && echo '════════════════════════════════════════════════════════════════════════════════' && docker-compose -f docker-compose.dev.yml logs -f backend"
     end tell
     
     -- 选择右上角窗格并水平分割 (Temporal)

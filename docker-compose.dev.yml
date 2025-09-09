@@ -16,8 +16,8 @@ services:
       timeout: 5s
       retries: 5
 
-  # 后端调试服务器
-  backend-debug:
+  # 后端服务器
+  backend:
     build: 
       context: ./backend
       dockerfile: Dockerfile.debug
@@ -54,7 +54,7 @@ services:
       - FAST_REFRESH=true
     command: ["sh", "-c", "npm run dev -- --config vite.config.dev.js --host 0.0.0.0 --port 3000"]
     depends_on:
-      - backend-debug
+      - backend
 
   # Storybook组件库文档
   storybook:

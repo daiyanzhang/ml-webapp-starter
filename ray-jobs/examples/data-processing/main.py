@@ -13,18 +13,19 @@ import numpy as np
 from datetime import datetime
 from typing import Dict, Any, List
 
-# 导入装饰器（同目录）
+# 导入调试工具
+from debug_utils import log_info, log_error, get_job_context
 from ray_job_decorator import ray_job_monitor
 
 
 @ray.remote
 def process_data_batch(data_batch: List[float], batch_id: int) -> Dict[str, Any]:
     """处理单个数据批次"""
-    print(f"Processing batch {batch_id} with {len(data_batch)} items")
-    
+    log_info(f"Processing batch {batch_id} with {len(data_batch)} items")
+
     # 模拟数据处理时间
     time.sleep(0.2)
-    
+
     # 计算统计信息
     stats = {
         "batch_id": batch_id,
@@ -33,9 +34,9 @@ def process_data_batch(data_batch: List[float], batch_id: int) -> Dict[str, Any]
         "max": float(np.max(data_batch)),
         "mean": float(np.mean(data_batch)),
         "std": float(np.std(data_batch)),
-        "sum": float(np.sum(data_batch))
+        "sum": float(np.sum(data_batch)),
     }
-    
+
     return stats
 
 
@@ -45,9 +46,9 @@ def generate_sample_data(size: int, seed: int = None) -> List[float]:
     if seed:
         random.seed(seed)
         np.random.seed(seed)
-    
-    print(f"Generating {size} data points")
-    
+
+    log_info(f"Generating {size} data points")
+
     # 生成混合分布数据
     data = []
     for i in range(size):
@@ -60,78 +61,78 @@ def generate_sample_data(size: int, seed: int = None) -> List[float]:
         else:
             # 指数分布
             data.append(np.random.exponential(20))
-    
+
     return data
 
 
-@ray_job_monitor(api_base_url="http://backend-debug:8000")
+@ray_job_monitor(api_base_url="http://backend:8000")
 def main():
     """主函数 - 作为独立Ray Job运行"""
     # 从环境变量获取参数
-    job_id = os.environ.get('RAY_JOB_ID', 'unknown')
-    task_type = os.environ.get('TASK_TYPE', 'data_processing')
-    params_str = os.environ.get('TASK_PARAMS', '{}')
-    
+    job_id = os.environ.get("RAY_JOB_ID", "unknown")
+    task_type = os.environ.get("TASK_TYPE", "data_processing")
+    params_str = os.environ.get("TASK_PARAMS", "{}")
+
     try:
         params = json.loads(params_str)
     except:
         params = {}
-    
-    print(f"=== Ray Data Processing Job Started ===")
-    print(f"Job ID: {job_id}")
-    print(f"Task Type: {task_type}")
-    print(f"Parameters: {params}")
-    
+
+    log_info("=== Ray Data Processing Job Started ===")
+    log_info(f"Job ID: {job_id}")
+    log_info(f"Task Type: {task_type}")
+    log_info(f"Parameters: {params}")
+
     # 连接到Ray集群
     if not ray.is_initialized():
         ray.init()
-    
+
     start_time = datetime.now()
-    
+
     # 获取参数
     data_size = params.get("data_size", 10000)
     batch_size = params.get("batch_size", 1000)
-    
-    print(f"Processing {data_size} data points in batches of {batch_size}")
-    
+
+    log_info(f"Processing {data_size} data points in batches of {batch_size}")
+
     # 第一步：生成数据
-    print("Step 1: Generating sample data...")
+    log_info("Step 1: Generating sample data...")
     data_future = generate_sample_data.remote(data_size, seed=42)
     data = ray.get(data_future)
-    
+
     # 第二步：分批处理数据
-    print("Step 2: Processing data in parallel batches...")
+    log_info("Step 2: Processing data in parallel batches...")
     batch_futures = []
-    
+
     for i in range(0, len(data), batch_size):
-        batch_data = data[i:i + batch_size]
+        batch_data = data[i : i + batch_size]
         batch_id = i // batch_size
         future = process_data_batch.remote(batch_data, batch_id)
         batch_futures.append(future)
-    
-    print(f"Created {len(batch_futures)} parallel processing tasks")
-    
+
+    log_info(f"Created {len(batch_futures)} parallel processing tasks")
+
     # 收集所有批次结果
     batch_results = ray.get(batch_futures)
-    
+
     # 第三步：聚合结果
-    print("Step 3: Aggregating results...")
-    
+    log_info("Step 3: Aggregating results...")
+
     total_processed = sum(result["size"] for result in batch_results)
     global_min = min(result["min"] for result in batch_results)
     global_max = max(result["max"] for result in batch_results)
     global_sum = sum(result["sum"] for result in batch_results)
     global_mean = global_sum / total_processed
-    
+
     # 计算全局标准差（简化版）
     batch_variances = []
     for result in batch_results:
         variance_contribution = result["std"] ** 2 * result["size"]
         batch_variances.append(variance_contribution)
-    
+
     global_variance = sum(batch_variances) / total_processed
     global_std = np.sqrt(global_variance)
-    
+
     # 构建最终结果
     final_result = {
         "job_id": job_id,
@@ -147,18 +148,18 @@ def main():
                     "max": float(global_max),
                     "mean": float(global_mean),
                     "std": float(global_std),
-                    "sum": float(global_sum)
-                }
+                    "sum": float(global_sum),
+                },
             },
-            "batch_statistics": batch_results[:5]  # 只返回前5个批次的详细统计
+            "batch_statistics": batch_results[:5],  # 只返回前5个批次的详细统计
         },
         "start_time": start_time.isoformat(),
         "end_time": datetime.now().isoformat(),
-        "status": "completed"
+        "status": "completed",
     }
-    
-    print(f"=== Ray Data Processing Job Logic Completed ===")
-    print(f"Processed {total_processed} data points in {len(batch_results)} batches")
+
+    log_info("=== Ray Data Processing Job Logic Completed ===")
+    log_info(f"Processed {total_processed} data points in {len(batch_results)} batches")
     return final_result
 
 

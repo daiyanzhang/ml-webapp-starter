@@ -3,16 +3,21 @@ Ray作业执行服务 - 基于GitHub代码的分布式任务执行
 """
 import os
 import uuid
-import importlib.util
+import json
 from typing import Dict, Any, Optional, List
 from datetime import datetime
 import asyncio
 
 import ray
+from ray.job_submission import JobSubmissionClient
 from pydantic import BaseModel
+from sqlalchemy.orm import Session
+from sqlalchemy import desc
 
 from app.core.config import settings
 from app.core.logging import logger
+from app.core.database import SessionLocal
+from app.db.models import RayJob
 from app.services.github_service import github_service
 
 
@@ -48,14 +53,76 @@ class JobStatus(BaseModel):
     github_repo: str
     branch: str
     entry_point: str
+    ray_job_id: Optional[str] = None  # Ray集群中的作业ID
+    dashboard_url: Optional[str] = None  # Ray Dashboard链接
 
 
 class RayJobService:
     """Ray作业管理服务"""
     
     def __init__(self):
-        self.active_jobs: Dict[str, JobStatus] = {}
         self._ensure_ray_initialized()
+    
+    def _create_db_job(self, job_status: JobStatus, job_request: 'GitHubJobRequest', user_id: int) -> None:
+        """创建数据库作业记录"""
+        db = SessionLocal()
+        try:
+            db_job = RayJob(
+                job_id=job_status.job_id,
+                status=job_status.status,
+                user_id=user_id,
+                github_repo=job_request.github_repo,
+                branch=job_request.branch,
+                entry_point=job_request.entry_point,
+                template_type=job_request.template_type,
+                config=json.dumps(job_request.config) if job_request.config else None,
+                job_config=json.dumps(job_request.job_config.dict()) if job_request.job_config else None,
+                created_at=job_status.created_at
+            )
+            db.add(db_job)
+            db.commit()
+            logger.info(f"Created database record for job {job_status.job_id}")
+        except Exception as e:
+            db.rollback()
+            logger.error(f"Failed to create database record for job {job_status.job_id}: {e}")
+        finally:
+            db.close()
+    
+    def _update_db_job(self, job_id: str, **updates) -> None:
+        """更新数据库作业记录"""
+        db = SessionLocal()
+        try:
+            db_job = db.query(RayJob).filter(RayJob.job_id == job_id).first()
+            if db_job:
+                for key, value in updates.items():
+                    if hasattr(db_job, key):
+                        setattr(db_job, key, value)
+                db.commit()
+                logger.info(f"Updated database record for job {job_id}")
+            else:
+                logger.warning(f"Job {job_id} not found in database")
+        except Exception as e:
+            db.rollback()
+            logger.error(f"Failed to update database record for job {job_id}: {e}")
+        finally:
+            db.close()
+    
+    def _job_status_from_db(self, db_job: RayJob) -> JobStatus:
+        """将数据库记录转换为JobStatus对象"""
+        return JobStatus(
+            job_id=db_job.job_id,
+            status=db_job.status,
+            created_at=db_job.created_at,
+            started_at=db_job.started_at,
+            completed_at=db_job.completed_at,
+            result=json.loads(db_job.result) if db_job.result else None,
+            error=db_job.error_message,
+            github_repo=db_job.github_repo,
+            branch=db_job.branch,
+            entry_point=db_job.entry_point,
+            ray_job_id=db_job.ray_job_id,
+            dashboard_url=db_job.dashboard_url
+        )
     
     def _ensure_ray_initialized(self):
         """确保Ray已初始化"""
@@ -78,14 +145,14 @@ class RayJobService:
         user_id: int
     ) -> str:
         """
-        提交基于GitHub的Ray作业
+        提交基于GitHub的Ray作业（异步）
         
         Args:
             job_request: 作业请求参数
             user_id: 用户ID
             
         Returns:
-            作业ID
+            作业ID（立即返回，无需等待执行完成）
         """
         job_id = f"ray_job_{uuid.uuid4().hex[:8]}"
         
@@ -98,7 +165,24 @@ class RayJobService:
             branch=job_request.branch,
             entry_point=job_request.entry_point
         )
-        self.active_jobs[job_id] = job_status
+        
+        # 保存到数据库
+        self._create_db_job(job_status, job_request, user_id)
+        
+        # 立即在后台启动作业执行，不阻塞API响应
+        asyncio.create_task(self._execute_github_job_async(job_id, job_request))
+        
+        logger.info(f"Job {job_id}: Submitted for execution")
+        return job_id
+    
+    async def _execute_github_job_async(
+        self, 
+        job_id: str, 
+        job_request: GitHubJobRequest
+    ) -> None:
+        """
+        异步执行GitHub Ray作业
+        """
         
         try:
             # 1. 克隆GitHub仓库
@@ -117,18 +201,19 @@ class RayJobService:
             
             if not validation["valid"]:
                 error_msg = f"Repository validation failed: {', '.join(validation['errors'])}"
-                job_status.status = "failed"
-                job_status.error = error_msg
+                self._update_db_job(job_id, 
+                                  status="failed",
+                                  error_message=error_msg,
+                                  completed_at=datetime.now())
                 await github_service.cleanup_repository(repo_path)
-                raise Exception(error_msg)
+                logger.error(f"Job {job_id}: {error_msg}")
+                return
             
             # 3. 提交Ray作业
             logger.info(f"Job {job_id}: Submitting to Ray cluster")
-            job_status.status = "running"
-            job_status.started_at = datetime.now()
             
-            # 执行作业
-            result = await self._execute_ray_job(
+            # 执行作业并获取Ray job ID
+            result, ray_job_id = await self._execute_ray_job(
                 job_id=job_id,
                 repo_path=repo_path,
                 entry_point=job_request.entry_point,
@@ -137,24 +222,30 @@ class RayJobService:
                 template_type=job_request.template_type
             )
             
-            # 4. 处理结果
-            job_status.status = "completed"
-            job_status.completed_at = datetime.now()
-            job_status.result = result
+            # 更新数据库状态为pending，dashboard链接由前端拼接
+            self._update_db_job(job_id,
+                              status="pending",  # Ray job已提交，状态为pending，后续由ray_job_decorator更新
+                              ray_job_id=ray_job_id)
             
-            logger.info(f"Job {job_id}: Completed successfully")
+            logger.info(f"Job {job_id}: Ray job {ray_job_id} submitted, status set to pending")
             
             # 5. 清理临时文件
             await github_service.cleanup_repository(repo_path)
             
-            return job_id
-            
         except Exception as e:
-            job_status.status = "failed"
-            job_status.error = str(e)
-            job_status.completed_at = datetime.now()
-            logger.error(f"Job {job_id}: Failed - {str(e)}")
-            raise
+            error_msg = str(e)
+            self._update_db_job(job_id,
+                              status="failed",
+                              error_message=error_msg,
+                              completed_at=datetime.now())
+            logger.error(f"Job {job_id}: Failed - {error_msg}")
+            
+            # 尝试清理，但不再抛出异常影响其他作业
+            try:
+                if 'repo_path' in locals():
+                    await github_service.cleanup_repository(repo_path)
+            except:
+                pass
     
     async def _execute_ray_job(
         self,
@@ -164,174 +255,104 @@ class RayJobService:
         config: Dict[str, Any],
         job_config: JobConfig,
         template_type: str
-    ) -> Any:
+    ) -> tuple[Any, Optional[str]]:
         """执行Ray作业"""
         
-        # 准备运行时环境
+        # 准备运行时环境 - 将整个仓库目录作为working_dir
         runtime_env = {
-            "working_dir": repo_path,
+            "working_dir": repo_path
         }
         
-        # 如果有requirements.txt，添加pip依赖
-        requirements_path = os.path.join(repo_path, "requirements.txt")
-        if os.path.exists(requirements_path):
-            runtime_env["pip"] = requirements_path
+        # 检查requirements.txt位置（先检查entry point目录，再检查根目录）
+        entry_dir = os.path.join(repo_path, os.path.dirname(entry_point))
+        requirements_locations = [
+            os.path.join(entry_dir, "requirements.txt"),  # entry point目录
+            os.path.join(repo_path, "requirements.txt")   # 根目录
+        ]
         
-        # 根据模板类型选择执行函数
-        if template_type == "data_processing":
-            executor_func = self._create_data_processing_executor(runtime_env, job_config)
-        elif template_type == "ml_training":
-            executor_func = self._create_ml_training_executor(runtime_env, job_config)
-        else:
-            executor_func = self._create_custom_executor(runtime_env, job_config)
+        for req_path in requirements_locations:
+            if os.path.exists(req_path):
+                runtime_env["pip"] = req_path
+                break
         
-        # 提交Ray任务
+        # 不再硬编码py_modules，而是通过PYTHONPATH让Python自然找到依赖
+        
+        # 不再需要创建executor，直接使用Job Submission API
+        
+        # 提交Ray Job (使用Job Submission API)
         try:
-            future = executor_func.remote(entry_point, config)
-            result = ray.get(future)
-            return result
+            # 连接到Ray集群
+            client = JobSubmissionClient("http://ray-head:8265")
+            
+            # 设置环境变量传递配置
+            runtime_env["env_vars"] = {
+                "RAY_JOB_CONFIG": json.dumps(config),
+                "RAY_JOB_ID": job_id,
+                "RAY_JOB_TYPE": template_type,
+                "PYTHONPATH": "./ray-jobs:$PYTHONPATH"  # 将ray-jobs目录添加到Python路径
+            }
+            
+            # 直接执行用户的Python文件
+            entrypoint = f"python {entry_point}"
+            
+            # 异步提交job
+            loop = asyncio.get_event_loop()
+            job_submission_id = await loop.run_in_executor(
+                None,
+                lambda: client.submit_job(
+                    entrypoint=entrypoint,
+                    runtime_env=runtime_env,
+                    metadata={"internal_job_id": job_id}
+                )
+            )
+            
+            logger.info(f"Submitted Ray job {job_submission_id} for internal job {job_id}")
+            
+            # 异步提交完成，立即返回
+            return {"success": True, "message": "Ray job submitted successfully"}, job_submission_id
         except Exception as e:
             logger.error(f"Ray job execution failed: {str(e)}")
             raise
     
-    def _create_custom_executor(self, runtime_env: Dict[str, Any], job_config: JobConfig):
-        """创建自定义执行器"""
-        
-        @ray.remote(
-            runtime_env=runtime_env,
-            memory=job_config.memory * 1024 * 1024,  # 转换为字节
-            num_cpus=job_config.cpu,
-            num_gpus=job_config.gpu
-        )
-        def execute_custom_code(entry_file: str, config: dict):
-            """执行用户自定义代码"""
-            import sys
-            import os
-            
-            try:
-                # 动态加载用户模块
-                spec = importlib.util.spec_from_file_location("user_module", entry_file)
-                if spec is None or spec.loader is None:
-                    raise ImportError(f"Cannot load module from {entry_file}")
-                
-                user_module = importlib.util.module_from_spec(spec)
-                spec.loader.exec_module(user_module)
-                
-                # 尝试执行process_data函数
-                if hasattr(user_module, 'process_data'):
-                    logger.info("Executing user's process_data function")
-                    result = user_module.process_data(config.get('input_data'), config)
-                    return {"success": True, "result": result, "type": "function_result"}
-                else:
-                    # 如果没有process_data函数，整个脚本已经执行了
-                    logger.info("No process_data function found, script executed during import")
-                    return {"success": True, "result": "Script executed successfully", "type": "script_execution"}
-                
-            except Exception as e:
-                logger.error(f"User code execution failed: {str(e)}")
-                return {"success": False, "error": str(e)}
-        
-        return execute_custom_code
-    
-    def _create_data_processing_executor(self, runtime_env: Dict[str, Any], job_config: JobConfig):
-        """创建数据处理执行器"""
-        
-        @ray.remote(
-            runtime_env=runtime_env,
-            memory=job_config.memory * 1024 * 1024,
-            num_cpus=job_config.cpu,
-            num_gpus=job_config.gpu
-        )
-        def execute_data_processing(entry_file: str, config: dict):
-            """执行数据处理作业"""
-            import pandas as pd
-            
-            try:
-                # 加载用户模块
-                spec = importlib.util.spec_from_file_location("user_module", entry_file)
-                user_module = importlib.util.module_from_spec(spec)
-                spec.loader.exec_module(user_module)
-                
-                # 准备输入数据
-                input_data = None
-                if 'data_source' in config:
-                    # 这里可以扩展支持多种数据源
-                    data_source = config['data_source']
-                    if data_source.endswith('.csv'):
-                        input_data = pd.read_csv(data_source)
-                    elif data_source.endswith('.json'):
-                        input_data = pd.read_json(data_source)
-                
-                # 执行用户的数据处理函数
-                if hasattr(user_module, 'process_data'):
-                    result = user_module.process_data(input_data, config)
-                    
-                    # 保存结果
-                    if 'output_path' in config and isinstance(result, pd.DataFrame):
-                        result.to_csv(config['output_path'], index=False)
-                    
-                    return {"success": True, "result": result, "type": "data_processing"}
-                else:
-                    raise Exception("process_data function not found in user code")
-                
-            except Exception as e:
-                return {"success": False, "error": str(e)}
-        
-        return execute_data_processing
-    
-    def _create_ml_training_executor(self, runtime_env: Dict[str, Any], job_config: JobConfig):
-        """创建机器学习训练执行器"""
-        
-        @ray.remote(
-            runtime_env=runtime_env,
-            memory=job_config.memory * 1024 * 1024,
-            num_cpus=job_config.cpu,
-            num_gpus=job_config.gpu
-        )
-        def execute_ml_training(entry_file: str, config: dict):
-            """执行机器学习训练作业"""
-            try:
-                # 加载用户模块
-                spec = importlib.util.spec_from_file_location("user_module", entry_file)
-                user_module = importlib.util.module_from_spec(spec)
-                spec.loader.exec_module(user_module)
-                
-                # ML训练通常需要更复杂的数据处理
-                if hasattr(user_module, 'train_model'):
-                    result = user_module.train_model(config)
-                    return {"success": True, "result": result, "type": "ml_training"}
-                elif hasattr(user_module, 'process_data'):
-                    result = user_module.process_data(None, config)
-                    return {"success": True, "result": result, "type": "ml_processing"}
-                else:
-                    raise Exception("Neither train_model nor process_data function found")
-                
-            except Exception as e:
-                return {"success": False, "error": str(e)}
-        
-        return execute_ml_training
-    
     async def get_job_status(self, job_id: str) -> Optional[JobStatus]:
         """获取作业状态"""
-        return self.active_jobs.get(job_id)
+        db = SessionLocal()
+        try:
+            db_job = db.query(RayJob).filter(RayJob.job_id == job_id).first()
+            if db_job:
+                return self._job_status_from_db(db_job)
+            return None
+        finally:
+            db.close()
     
     async def list_jobs(self, limit: int = 10) -> List[JobStatus]:
         """列出作业"""
-        jobs = list(self.active_jobs.values())
-        # 按创建时间倒序排序
-        jobs.sort(key=lambda x: x.created_at, reverse=True)
-        return jobs[:limit]
+        db = SessionLocal()
+        try:
+            db_jobs = db.query(RayJob).order_by(desc(RayJob.created_at)).limit(limit).all()
+            return [self._job_status_from_db(job) for job in db_jobs]
+        finally:
+            db.close()
     
     async def cancel_job(self, job_id: str) -> bool:
         """取消作业"""
-        # TODO: 实现作业取消逻辑
-        if job_id in self.active_jobs:
-            job = self.active_jobs[job_id]
-            if job.status == "running":
-                job.status = "cancelled"
-                job.completed_at = datetime.now()
+        # TODO: 实现Ray作业取消逻辑
+        db = SessionLocal()
+        try:
+            db_job = db.query(RayJob).filter(RayJob.job_id == job_id).first()
+            if db_job and db_job.status == "running":
+                db_job.status = "cancelled"
+                db_job.completed_at = datetime.now()
+                db.commit()
+                logger.info(f"Cancelled job {job_id}")
                 return True
-        return False
+            return False
+        except Exception as e:
+            db.rollback()
+            logger.error(f"Failed to cancel job {job_id}: {e}")
+            return False
+        finally:
+            db.close()
 
 
 # 单例服务实例

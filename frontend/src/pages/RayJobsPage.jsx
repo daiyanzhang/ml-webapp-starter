@@ -1,33 +1,33 @@
-import { useState, useEffect } from 'react';
 import {
+  CheckCircleOutlined,
+  ClockCircleOutlined,
+  ExclamationCircleOutlined,
+  EyeOutlined,
+  GithubOutlined,
+  PlayCircleOutlined,
+  ReloadOutlined,
+  StopOutlined
+} from '@ant-design/icons';
+import {
+  Alert,
+  Button,
   Card,
+  Col,
+  Descriptions,
   Form,
   Input,
-  Button,
-  Select,
-  Table,
-  Space,
-  Tag,
-  Modal,
-  Alert,
-  Tabs,
-  Descriptions,
+  InputNumber,
   message,
+  Modal,
   Row,
-  Col,
+  Select,
+  Space,
   Statistic,
-  InputNumber
+  Table,
+  Tabs,
+  Tag
 } from 'antd';
-import {
-  PlayCircleOutlined,
-  GithubOutlined,
-  StopOutlined,
-  ReloadOutlined,
-  EyeOutlined,
-  CheckCircleOutlined,
-  ExclamationCircleOutlined,
-  ClockCircleOutlined
-} from '@ant-design/icons';
+import { useEffect, useState } from 'react';
 import { rayJobService } from '../services/rayJobService';
 
 const { TextArea } = Input;
@@ -144,7 +144,16 @@ const RayJobsPage = () => {
     setDetailModalVisible(true);
   };
 
-  const getStatusColor = (status) => {
+  const getActualStatus = (job) => {
+    // 如果状态是completed，检查result.success来确定真实状态
+    if (job.status === 'completed' && job.result && job.result.success === false) {
+      return 'failed';
+    }
+    return job.status;
+  };
+
+  const getStatusColor = (job) => {
+    const actualStatus = getActualStatus(job);
     const colors = {
       'pending': 'orange',
       'running': 'blue', 
@@ -152,10 +161,11 @@ const RayJobsPage = () => {
       'failed': 'red',
       'cancelled': 'default'
     };
-    return colors[status] || 'default';
+    return colors[actualStatus] || 'default';
   };
 
-  const getStatusIcon = (status) => {
+  const getStatusIcon = (job) => {
+    const actualStatus = getActualStatus(job);
     const icons = {
       'pending': <ClockCircleOutlined />,
       'running': <PlayCircleOutlined spin />,
@@ -163,7 +173,12 @@ const RayJobsPage = () => {
       'failed': <ExclamationCircleOutlined />,
       'cancelled': <StopOutlined />
     };
-    return icons[status] || <ClockCircleOutlined />;
+    return icons[actualStatus] || <ClockCircleOutlined />;
+  };
+
+  const getStatusText = (job) => {
+    const actualStatus = getActualStatus(job);
+    return actualStatus.toUpperCase();
   };
 
   const columns = [
@@ -190,9 +205,9 @@ const RayJobsPage = () => {
       title: 'Status',
       dataIndex: 'status',
       key: 'status',
-      render: (status) => (
-        <Tag color={getStatusColor(status)} icon={getStatusIcon(status)}>
-          {status.toUpperCase()}
+      render: (_, job) => (
+        <Tag color={getStatusColor(job)} icon={getStatusIcon(job)}>
+          {getStatusText(job)}
         </Tag>
       )
     },
@@ -509,8 +524,8 @@ const RayJobsPage = () => {
             <Descriptions column={2} bordered>
               <Descriptions.Item label="Job ID">{selectedJob.job_id}</Descriptions.Item>
               <Descriptions.Item label="Status">
-                <Tag color={getStatusColor(selectedJob.status)} icon={getStatusIcon(selectedJob.status)}>
-                  {selectedJob.status.toUpperCase()}
+                <Tag color={getStatusColor(selectedJob)} icon={getStatusIcon(selectedJob)}>
+                  {getStatusText(selectedJob)}
                 </Tag>
               </Descriptions.Item>
               <Descriptions.Item label="Repository">{selectedJob.github_repo}</Descriptions.Item>
@@ -523,6 +538,17 @@ const RayJobsPage = () => {
               {selectedJob.completed_at && (
                 <Descriptions.Item label="Completed">{new Date(selectedJob.completed_at).toLocaleString()}</Descriptions.Item>
               )}
+              {selectedJob.dashboard_url && (
+                <Descriptions.Item label="Ray Dashboard">
+                  <Button 
+                    type="link" 
+                    icon={<GithubOutlined />}
+                    onClick={() => window.open(selectedJob.dashboard_url, '_blank')}
+                  >
+                    View Logs & Metrics
+                  </Button>
+                </Descriptions.Item>
+              )}
             </Descriptions>
 
             {selectedJob.result && (
@@ -533,11 +559,15 @@ const RayJobsPage = () => {
               </Card>
             )}
 
-            {selectedJob.error && (
+            {(selectedJob.error || (selectedJob.result && selectedJob.result.success === false)) && (
               <Alert
                 type="error"
                 message="Job Error"
-                description={selectedJob.error}
+                description={
+                  selectedJob.error || 
+                  (selectedJob.result && selectedJob.result.error) ||
+                  "Job execution failed"
+                }
                 style={{ marginTop: 16 }}
               />
             )}

@@ -113,11 +113,21 @@ class GitHubService:
             # 验证入口文件内容
             await self._validate_entry_file(entry_file, validation_result)
         
-        # 检查requirements.txt
-        requirements_file = repo_path / "requirements.txt"
-        if requirements_file.exists():
-            validation_result["info"]["has_requirements"] = True
-        else:
+        # 检查requirements.txt (先检查entry point目录，再检查根目录)
+        entry_dir = (repo_path / entry_point).parent
+        requirements_locations = [
+            entry_dir / "requirements.txt",  # entry point目录
+            repo_path / "requirements.txt"   # 根目录
+        ]
+        
+        requirements_found = False
+        for req_file in requirements_locations:
+            if req_file.exists():
+                validation_result["info"]["has_requirements"] = True
+                requirements_found = True
+                break
+        
+        if not requirements_found:
             validation_result["warnings"].append("No requirements.txt found - assuming no dependencies")
         
         # 检查配置文件

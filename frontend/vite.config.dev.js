@@ -1,7 +1,7 @@
-import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
+import { defineConfig } from 'vite'
 
-// Debug环境配置 - 代理到backend-debug服务
+// Debug环境配置 - 代理到backend服务
 export default defineConfig({
   plugins: [react()],
   server: {
@@ -15,7 +15,7 @@ export default defineConfig({
     },
     proxy: {
       '/api': {
-        target: 'http://backend-debug:8000',  // Debug环境使用backend-debug服务名
+        target: 'http://backend:8000',  // Debug环境使用backend服务名
         changeOrigin: true
       }
     }

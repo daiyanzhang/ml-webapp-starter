@@ -159,8 +159,8 @@ def get_job_context() -> Dict[str, Any]:
     """获取当前Job上下文信息"""
     return {
         "job_id": os.environ.get('RAY_JOB_ID', 'unknown'),
-        "task_type": os.environ.get('TASK_TYPE', 'unknown'),
-        "task_params": os.environ.get('TASK_PARAMS', '{}'),
+        "task_type": os.environ.get('RAY_JOB_TYPE', 'unknown'),
+        "task_params": os.environ.get('RAY_JOB_CONFIG', '{}'),
         "debug_mode": is_debug_mode(),
         "timestamp": datetime.now().isoformat()
     }

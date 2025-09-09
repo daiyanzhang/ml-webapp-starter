@@ -238,7 +238,7 @@ Pre-configured debugging support:
 
 ```bash
 # Backend tests
-docker-compose -f docker-compose.dev.yml exec backend-debug pytest
+docker-compose -f docker-compose.dev.yml exec backend pytest
 
 # Frontend tests
 cd frontend && npm test

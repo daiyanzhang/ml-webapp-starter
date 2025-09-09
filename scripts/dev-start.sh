@@ -29,7 +29,7 @@ echo ""
 # Initialize admin user (skip if --skip-init flag is provided)
 if [[ "$1" != "--skip-init" ]]; then
     echo "👤 Initializing admin user..."
-    docker-compose -f docker-compose.dev.yml exec backend-debug python /scripts/create_admin.py
+    docker-compose -f docker-compose.dev.yml exec backend python /scripts/create_admin.py
 else
     echo "⏭️  Skipping admin user initialization"
 fi

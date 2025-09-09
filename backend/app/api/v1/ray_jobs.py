@@ -1,7 +1,9 @@
 """
 Ray作业管理API端点
 """
+import json
 from typing import List
+from datetime import datetime
 from fastapi import APIRouter, Depends, HTTPException, BackgroundTasks
 
 from app.api.deps import get_current_active_user
@@ -205,6 +207,44 @@ async def get_ray_cluster_status(
             "status": "error",
             "error": str(e)
         }
+
+
+@router.post("/update-status")
+async def update_ray_job_status(
+    update_data: dict
+):
+    """更新Ray作业状态 - 由ray_job_decorator调用"""
+    try:
+        job_id = update_data.get("job_id")
+        status = update_data.get("status")
+        
+        if not job_id or not status:
+            raise HTTPException(status_code=400, detail="Missing job_id or status")
+        
+        # 更新数据库
+        from app.services.ray_job_service import ray_job_service
+        
+        update_fields = {"status": status}
+        
+        # 添加可选字段
+        if "result" in update_data:
+            update_fields["result"] = json.dumps(update_data["result"])
+        if "error_message" in update_data:
+            update_fields["error_message"] = update_data["error_message"]
+        if "start_time" in update_data:
+            update_fields["started_at"] = datetime.fromisoformat(update_data["start_time"].replace('Z', '+00:00'))
+        if "end_time" in update_data:
+            update_fields["completed_at"] = datetime.fromisoformat(update_data["end_time"].replace('Z', '+00:00'))
+        
+        # 调用service更新
+        ray_job_service._update_db_job(job_id, **update_fields)
+        
+        logger.info(f"Updated job {job_id} status to {status}")
+        return {"success": True, "message": f"Job {job_id} status updated to {status}"}
+        
+    except Exception as e:
+        logger.error(f"Failed to update job status: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 @router.get("/examples", response_model=dict)
