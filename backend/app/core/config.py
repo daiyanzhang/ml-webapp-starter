@@ -23,6 +23,9 @@ class Settings(BaseSettings):
     # CORS配置
     ALLOWED_HOSTS: List[str] = ["http://localhost:3000", "http://127.0.0.1:3000"]
     
+    # 日志配置
+    LOG_LEVEL: str = "INFO"
+    
     # Temporal配置
     TEMPORAL_HOST: str = "temporal:7233"
     TEMPORAL_NAMESPACE: str = "default"

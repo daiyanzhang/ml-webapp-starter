@@ -1,786 +1,549 @@
 import { useState, useEffect } from 'react';
-import { 
-  Card, 
-  Button, 
-  Form, 
-  Input, 
-  Select, 
-  Space, 
-  message,
+import {
+  Card,
+  Form,
+  Input,
+  Button,
+  Select,
+  Table,
+  Space,
+  Tag,
+  Modal,
+  Alert,
   Tabs,
-  Statistic,
+  Descriptions,
+  message,
   Row,
   Col,
-  Typography,
-  Alert,
-  Collapse,
-  Badge,
-  Spin,
-  Table,
-  Tag,
-  Tooltip,
-  Modal
+  Statistic,
+  InputNumber
 } from 'antd';
-import { 
-  PlayCircleOutlined, 
+import {
+  PlayCircleOutlined,
+  GithubOutlined,
+  StopOutlined,
   ReloadOutlined,
-  ThunderboltOutlined,
-  ClusterOutlined,
-  ExperimentOutlined,
-  BarChartOutlined,
-  RobotOutlined,
-  InfoCircleOutlined,
-  HistoryOutlined,
-  EyeOutlined
+  EyeOutlined,
+  CheckCircleOutlined,
+  ExclamationCircleOutlined,
+  ClockCircleOutlined
 } from '@ant-design/icons';
-import { rayService } from '../services/rayService';
+import { rayJobService } from '../services/rayJobService';
 
-const { Title, Text, Paragraph } = Typography;
-const { Option } = Select;
-const { Panel } = Collapse;
-const { TabPane } = Tabs;
+const { TextArea } = Input;
 
 const RayJobsPage = () => {
-  const [clusterStatus, setClusterStatus] = useState(null);
-  const [availableJobs, setAvailableJobs] = useState([]);
+  const [form] = Form.useForm();
+  const [jobs, setJobs] = useState([]);
+  const [templates, setTemplates] = useState({});
+  const [clusterStatus, setClusterStatus] = useState({});
   const [loading, setLoading] = useState(false);
   const [submitting, setSubmitting] = useState(false);
-  const [lastResult, setLastResult] = useState(null);
-  const [jobHistory, setJobHistory] = useState([]);
-  const [historyLoading, setHistoryLoading] = useState(false);
   const [selectedJob, setSelectedJob] = useState(null);
-  const [jobDetailModal, setJobDetailModal] = useState(false);
-  const [pollingJobs, setPollingJobs] = useState(new Set());
-  const [form] = Form.useForm();
+  const [detailModalVisible, setDetailModalVisible] = useState(false);
+  const [validating, setValidating] = useState(false);
+  const [validationResult, setValidationResult] = useState(null);
 
-  // 获取集群状态
-  const fetchClusterStatus = async () => {
-    try {
-      const status = await rayService.getClusterStatus();
-      setClusterStatus(status);
-    } catch (error) {
-      message.error('获取集群状态失败: ' + error.message);
-      setClusterStatus({ status: 'error', error: error.message });
-    }
-  };
+  useEffect(() => {
+    loadJobs();
+    loadTemplates();
+    loadClusterStatus();
+    
+    // 定期刷新作业状态
+    const interval = setInterval(loadJobs, 5000);
+    return () => clearInterval(interval);
+  }, []);
 
-  // 获取可用任务
-  const fetchAvailableJobs = async () => {
+  const loadJobs = async () => {
     try {
-      const jobs = await rayService.getAvailableJobs();
-      setAvailableJobs(jobs);
+      setLoading(true);
+      const response = await rayJobService.listJobs();
+      setJobs(response);
     } catch (error) {
-      message.error('获取可用任务失败: ' + error.message);
-    }
-  };
-
-  // 获取任务历史
-  const fetchJobHistory = async () => {
-    setHistoryLoading(true);
-    try {
-      const jobs = await rayService.getJobHistory(50, 0);
-      setJobHistory(jobs);
-    } catch (error) {
-      message.error('获取任务历史失败: ' + error.message);
+      console.error('Failed to load jobs:', error);
     } finally {
-      setHistoryLoading(false);
+      setLoading(false);
     }
   };
 
-  // 轮询任务状态
-  const startJobStatusPolling = (jobId) => {
-    setPollingJobs(prev => {
-      if (prev.has(jobId)) return prev; // 已在轮询中
-      const newSet = new Set(prev);
-      newSet.add(jobId);
-      return newSet;
-    });
-    
-    const pollInterval = setInterval(async () => {
-      try {
-        const job = await rayService.getJobById(jobId);
-        
-        if (job.status === 'completed') {
-          message.success(`任务完成: ${jobId}`);
-          clearInterval(pollInterval);
-          setPollingJobs(prev => {
-            const newSet = new Set(prev);
-            newSet.delete(jobId);
-            return newSet;
-          });
-          fetchJobHistory(); // 刷新历史记录
-        } else if (job.status === 'failed') {
-          message.error(`任务失败: ${jobId} - ${job.error_message}`);
-          clearInterval(pollInterval);
-          setPollingJobs(prev => {
-            const newSet = new Set(prev);
-            newSet.delete(jobId);
-            return newSet;
-          });
-          fetchJobHistory(); // 刷新历史记录
-        } else if (job.status === 'running') {
-          // 任务正在运行，继续轮询
-          console.log(`任务运行中: ${jobId}`);
-        }
-      } catch (error) {
-        console.error(`轮询任务状态失败: ${jobId}`, error);
-        // 如果连续失败多次，停止轮询
-      }
-    }, 3000); // 每3秒轮询一次
-    
-    // 设置最大轮询时间（10分钟）
-    setTimeout(() => {
-      clearInterval(pollInterval);
-      setPollingJobs(prev => {
-        const newSet = new Set(prev);
-        newSet.delete(jobId);
-        return newSet;
-      });
-    }, 10 * 60 * 1000);
-  };
-
-  // 查看任务详情
-  const handleViewJobDetail = async (jobId) => {
+  const loadTemplates = async () => {
     try {
-      const job = await rayService.getJobById(jobId);
-      setSelectedJob(job);
-      setJobDetailModal(true);
+      const response = await rayJobService.getTemplates();
+      setTemplates(response);
     } catch (error) {
-      message.error('获取任务详情失败: ' + error.message);
+      console.error('Failed to load templates:', error);
     }
   };
 
-  // 提交任务
+  const loadClusterStatus = async () => {
+    try {
+      const response = await rayJobService.getClusterStatus();
+      setClusterStatus(response);
+    } catch (error) {
+      console.error('Failed to load cluster status:', error);
+    }
+  };
+
   const handleSubmitJob = async (values) => {
     setSubmitting(true);
     try {
-      const result = await rayService.submitJob(values.jobType, values.parameters || {});
-      setLastResult(result);
-      
-      if (result.status === 'submitted') {
-        message.success(`任务已提交: ${result.job_id}，正在执行中...`);
-        // 开始轮询任务状态
-        startJobStatusPolling(result.job_id);
-      } else if (result.status === 'failed') {
-        message.error(`任务提交失败: ${result.error}`);
+      const response = await rayJobService.submitGitHubJob(values);
+      if (response.success) {
+        message.success(`Job ${response.job_id} submitted successfully!`);
+        form.resetFields();
+        setValidationResult(null);
+        await loadJobs();
       }
-      
-      // 刷新任务历史
-      fetchJobHistory();
     } catch (error) {
-      message.error('提交任务失败: ' + error.message);
+      message.error(`Failed to submit job: ${error.message}`);
     } finally {
       setSubmitting(false);
     }
   };
 
-  // 快速测试任务
-  const handleQuickTest = async (testType) => {
-    setSubmitting(true);
+  const handleValidateRepo = async () => {
+    const repoUrl = form.getFieldValue('github_repo');
+    const branch = form.getFieldValue('branch') || 'main';
+    const entryPoint = form.getFieldValue('entry_point') || 'main.py';
+    
+    if (!repoUrl) {
+      message.warning('Please enter GitHub repository URL');
+      return;
+    }
+
+    setValidating(true);
     try {
-      let result;
+      const result = await rayJobService.validateRepository(repoUrl, branch, entryPoint);
+      setValidationResult(result);
       
-      switch (testType) {
-        case 'simple':
-          result = await rayService.testSimpleJob('prime_count');
-          break;
-        case 'data_processing':
-          result = await rayService.testDataProcessing(3000, 300);
-          break;
-        case 'machine_learning':
-          result = await rayService.testMachineLearning({
-            n_samples: 2000,
-            n_features: 10,
-            n_classes: 3,
-            n_models: 2
-          });
-          break;
-        default:
-          throw new Error('未知的测试类型');
+      if (result.success) {
+        message.success('Repository validation passed!');
+      } else {
+        message.error('Repository validation failed');
       }
-      
-      setLastResult(result);
-      
-      if (result.status === 'submitted') {
-        message.success(`测试任务已提交: ${result.job_id}，正在执行中...`);
-        // 开始轮询任务状态
-        startJobStatusPolling(result.job_id);
-      } else if (result.status === 'failed') {
-        message.error(`测试任务提交失败: ${result.error}`);
-      }
-      
-      // 刷新任务历史
-      fetchJobHistory();
     } catch (error) {
-      message.error('快速测试失败: ' + error.message);
+      message.error(`Validation failed: ${error.message}`);
+      setValidationResult({ success: false, error: error.message });
     } finally {
-      setSubmitting(false);
+      setValidating(false);
     }
   };
 
-  // 渲染集群状态
-  const renderClusterStatus = () => {
-    if (!clusterStatus) return null;
+  const handleCancelJob = async (jobId) => {
+    try {
+      await rayJobService.cancelJob(jobId);
+      message.success(`Job ${jobId} cancelled successfully`);
+      await loadJobs();
+    } catch (error) {
+      message.error(`Failed to cancel job: ${error.message}`);
+    }
+  };
 
-    const isConnected = clusterStatus.status === 'connected';
-    
-    return (
-      <Card 
-        title={
-          <Space>
-            <ClusterOutlined />
-            Ray集群状态
-            <Badge 
-              status={isConnected ? 'success' : 'error'} 
-              text={isConnected ? '已连接' : '断开连接'} 
-            />
-          </Space>
+  const showJobDetail = (job) => {
+    setSelectedJob(job);
+    setDetailModalVisible(true);
+  };
+
+  const getStatusColor = (status) => {
+    const colors = {
+      'pending': 'orange',
+      'running': 'blue', 
+      'completed': 'green',
+      'failed': 'red',
+      'cancelled': 'default'
+    };
+    return colors[status] || 'default';
+  };
+
+  const getStatusIcon = (status) => {
+    const icons = {
+      'pending': <ClockCircleOutlined />,
+      'running': <PlayCircleOutlined spin />,
+      'completed': <CheckCircleOutlined />,
+      'failed': <ExclamationCircleOutlined />,
+      'cancelled': <StopOutlined />
+    };
+    return icons[status] || <ClockCircleOutlined />;
+  };
+
+  const columns = [
+    {
+      title: 'Job ID',
+      dataIndex: 'job_id',
+      key: 'job_id',
+      render: (text) => <code>{text.slice(-8)}</code>
+    },
+    {
+      title: 'Repository',
+      dataIndex: 'github_repo',
+      key: 'github_repo',
+      render: (text, record) => (
+        <div>
+          <div><GithubOutlined /> {text}</div>
+          <small style={{ color: '#666' }}>
+            {record.branch} / {record.entry_point}
+          </small>
+        </div>
+      )
+    },
+    {
+      title: 'Status',
+      dataIndex: 'status',
+      key: 'status',
+      render: (status) => (
+        <Tag color={getStatusColor(status)} icon={getStatusIcon(status)}>
+          {status.toUpperCase()}
+        </Tag>
+      )
+    },
+    {
+      title: 'Created',
+      dataIndex: 'created_at',
+      key: 'created_at',
+      render: (text) => new Date(text).toLocaleString()
+    },
+    {
+      title: 'Duration',
+      key: 'duration',
+      render: (_, record) => {
+        if (record.started_at && record.completed_at) {
+          const duration = Math.round(
+            (new Date(record.completed_at) - new Date(record.started_at)) / 1000
+          );
+          return `${duration}s`;
         }
-        extra={
-          <Button 
-            icon={<ReloadOutlined />} 
-            onClick={fetchClusterStatus}
-            loading={loading}
+        return record.started_at ? 'Running...' : '-';
+      }
+    },
+    {
+      title: 'Actions',
+      key: 'actions',
+      render: (_, record) => (
+        <Space>
+          <Button
+            type="text"
+            icon={<EyeOutlined />}
+            onClick={() => showJobDetail(record)}
+            size="small"
           >
-            刷新
+            Detail
           </Button>
-        }
-      >
-        {isConnected ? (
-          <Row gutter={16}>
-            <Col span={6}>
-              <Statistic 
-                title="节点数" 
-                value={clusterStatus.nodes} 
-                prefix={<ClusterOutlined />}
-              />
-            </Col>
-            <Col span={6}>
-              <Statistic 
-                title="CPU核心" 
-                value={clusterStatus.cluster_resources?.CPU || 0} 
-                precision={0}
-              />
-            </Col>
-            <Col span={6}>
-              <Statistic 
-                title="内存 (GB)" 
-                value={(clusterStatus.cluster_resources?.memory || 0) / (1024 * 1024 * 1024)} 
-                precision={1}
-              />
-            </Col>
-            <Col span={6}>
-              <Statistic 
-                title="Ray版本" 
-                value={clusterStatus.ray_version} 
-                formatter={(value) => <Text code>{value}</Text>}
-              />
-            </Col>
-          </Row>
-        ) : (
-          <Alert
-            type="error"
-            message="集群连接失败"
-            description={clusterStatus.error || '无法连接到Ray集群'}
-            showIcon
-          />
-        )}
-      </Card>
-    );
-  };
-
-  // 渲染任务结果
-  const renderJobResult = () => {
-    if (!lastResult) return null;
-
-    const isSuccess = lastResult.status === 'completed';
-    
-    return (
-      <Card 
-        title={
-          <Space>
-            <ThunderboltOutlined />
-            任务执行结果
-            <Badge 
-              status={isSuccess ? 'success' : 'error'} 
-              text={isSuccess ? '执行成功' : '执行失败'} 
-            />
-          </Space>
-        }
-      >
-        <Space direction="vertical" style={{ width: '100%' }}>
-          <Row gutter={16}>
-            <Col span={8}>
-              <Text strong>任务ID: </Text>
-              <Text code>{lastResult.job_id}</Text>
-            </Col>
-            <Col span={8}>
-              <Text strong>状态: </Text>
-              <Badge 
-                status={isSuccess ? 'success' : 'error'} 
-                text={lastResult.status} 
-              />
-            </Col>
-            <Col span={8}>
-              <Text strong>提交时间: </Text>
-              <Text>{new Date(lastResult.submitted_at).toLocaleString()}</Text>
-            </Col>
-          </Row>
-          
-          {isSuccess && lastResult.result && (
-            <Collapse>
-              <Panel header="执行结果详情" key="1">
-                <pre style={{
-                  backgroundColor: '#f5f5f5',
-                  padding: '12px',
-                  borderRadius: '4px',
-                  maxHeight: '400px',
-                  overflow: 'auto'
-                }}>
-                  {JSON.stringify(lastResult.result, null, 2)}
-                </pre>
-              </Panel>
-            </Collapse>
-          )}
-          
-          {!isSuccess && lastResult.error && (
-            <Alert
-              type="error"
-              message="执行错误"
-              description={lastResult.error}
-              showIcon
-            />
+          {record.status === 'running' && (
+            <Button
+              type="text"
+              danger
+              icon={<StopOutlined />}
+              onClick={() => handleCancelJob(record.job_id)}
+              size="small"
+            >
+              Cancel
+            </Button>
           )}
         </Space>
-      </Card>
-    );
+      )
+    }
+  ];
+
+  const renderValidationResult = () => {
+    if (!validationResult) return null;
+
+    if (validationResult.success) {
+      const { validation } = validationResult;
+      return (
+        <Alert
+          type="success"
+          message="Repository Validation Passed"
+          description={
+            <div>
+              <p><strong>Entry point:</strong> {validation.info.entry_point_exists ? '✅ Found' : '❌ Missing'}</p>
+              <p><strong>Dependencies:</strong> {validation.info.has_requirements ? '✅ requirements.txt found' : '⚠️ No requirements.txt'}</p>
+              <p><strong>Size:</strong> {validation.info.size_mb}MB ({validation.info.file_count} files)</p>
+              {validation.warnings.length > 0 && (
+                <p><strong>Warnings:</strong> {validation.warnings.join(', ')}</p>
+              )}
+            </div>
+          }
+          style={{ marginBottom: 16 }}
+        />
+      );
+    } else {
+      return (
+        <Alert
+          type="error"
+          message="Repository Validation Failed"
+          description={validationResult.error}
+          style={{ marginBottom: 16 }}
+        />
+      );
+    }
   };
 
-  // 渲染任务表单
-  const renderJobForm = () => {
-    return (
-      <Card title={
-        <Space>
-          <RobotOutlined />
-          提交Ray任务
-        </Space>
-      }>
-        <Form
-          form={form}
-          layout="vertical"
-          onFinish={handleSubmitJob}
-        >
-          <Form.Item
-            name="jobType"
-            label="任务类型"
-            rules={[{ required: true, message: '请选择任务类型' }]}
-          >
-            <Select placeholder="选择任务类型" style={{ width: '100%' }}>
-              {availableJobs.map(job => (
-                <Option key={job.job_type} value={job.job_type}>
-                  <Space>
-                    <Text strong>{job.name}</Text>
-                    <Text type="secondary">- {job.description}</Text>
-                  </Space>
-                </Option>
-              ))}
-            </Select>
-          </Form.Item>
-
-          <Form.Item
-            name="parameters"
-            label="任务参数 (JSON格式)"
-            extra='例如: {"data_size": 10000, "batch_size": 1000}'
-          >
-            <Input.TextArea 
-              rows={4} 
-              placeholder='{"param1": "value1", "param2": "value2"}'
-            />
-          </Form.Item>
-
-          <Form.Item>
-            <Space>
-              <Button 
-                type="primary" 
-                htmlType="submit" 
-                loading={submitting}
-                icon={<PlayCircleOutlined />}
-              >
-                提交任务
-              </Button>
-              
-              <Button onClick={() => form.resetFields()}>
-                重置
-              </Button>
-            </Space>
-          </Form.Item>
-        </Form>
-      </Card>
-    );
-  };
-
-  // 渲染快速测试
-  const renderQuickTests = () => {
-    return (
-      <Card title={
-        <Space>
-          <ExperimentOutlined />
-          快速测试
-        </Space>
-      }>
+  const submitJobForm = (
+    <Card title="Submit Ray Job from GitHub" extra={
+      <Button icon={<ReloadOutlined />} onClick={loadTemplates}>
+        Refresh Templates
+      </Button>
+    }>
+      <Form
+        form={form}
+        layout="vertical"
+        onFinish={handleSubmitJob}
+        initialValues={{
+          template_type: 'custom',
+          branch: 'main',
+          entry_point: 'main.py',
+          job_config: {
+            memory: 1024,
+            cpu: 1.0,
+            gpu: 0,
+            timeout: 3600,
+            retry: 3
+          }
+        }}
+      >
         <Row gutter={16}>
-          <Col span={8}>
-            <Card size="small" hoverable>
-              <Space direction="vertical" align="center" style={{ width: '100%' }}>
-                <BarChartOutlined style={{ fontSize: 24, color: '#1890ff' }} />
-                <Text strong>简单计算</Text>
-                <Text type="secondary">素数计算测试</Text>
-                <Button 
-                  type="primary"
-                  size="small"
-                  loading={submitting}
-                  onClick={() => handleQuickTest('simple')}
-                >
-                  运行测试
-                </Button>
-              </Space>
-            </Card>
+          <Col span={12}>
+            <Form.Item
+              name="template_type"
+              label="Template Type"
+              tooltip="Choose the type of Ray job template"
+            >
+              <Select 
+                options={Object.entries(templates.templates || {}).map(([key, template]) => ({
+                  value: key,
+                  label: `${template.name} - ${template.description}`
+                }))}
+              />
+            </Form.Item>
           </Col>
-          
-          <Col span={8}>
-            <Card size="small" hoverable>
-              <Space direction="vertical" align="center" style={{ width: '100%' }}>
-                <ThunderboltOutlined style={{ fontSize: 24, color: '#52c41a' }} />
-                <Text strong>数据处理</Text>
-                <Text type="secondary">批量数据分析</Text>
-                <Button 
-                  type="primary"
-                  size="small" 
-                  loading={submitting}
-                  onClick={() => handleQuickTest('data_processing')}
-                >
-                  运行测试
-                </Button>
-              </Space>
-            </Card>
-          </Col>
-          
-          <Col span={8}>
-            <Card size="small" hoverable>
-              <Space direction="vertical" align="center" style={{ width: '100%' }}>
-                <RobotOutlined style={{ fontSize: 24, color: '#fa8c16' }} />
-                <Text strong>机器学习</Text>
-                <Text type="secondary">模型并行训练</Text>
-                <Button 
-                  type="primary"
-                  size="small"
-                  loading={submitting}
-                  onClick={() => handleQuickTest('machine_learning')}
-                >
-                  运行测试
-                </Button>
-              </Space>
-            </Card>
+          <Col span={12}>
+            <Form.Item
+              name="github_repo"
+              label="GitHub Repository"
+              rules={[{ required: true, message: 'Please enter GitHub repository' }]}
+              tooltip="Format: username/repository or full GitHub URL"
+            >
+              <Input
+                prefix={<GithubOutlined />}
+                placeholder="username/repository-name"
+                addonAfter={
+                  <Button
+                    type="link"
+                    size="small"
+                    loading={validating}
+                    onClick={handleValidateRepo}
+                  >
+                    Validate
+                  </Button>
+                }
+              />
+            </Form.Item>
           </Col>
         </Row>
-      </Card>
-    );
-  };
 
-  // 获取任务状态标签
-  const getStatusTag = (status, jobId) => {
-    const statusConfig = {
-      'completed': { color: 'green', text: '已完成' },
-      'failed': { color: 'red', text: '失败' },
-      'running': { color: 'blue', text: '运行中' },
-      'submitted': { color: 'orange', text: '已提交' }
-    };
-    
-    const config = statusConfig[status] || { color: 'default', text: status };
-    const isPolling = pollingJobs.has(jobId);
-    
-    return (
-      <Space>
-        <Tag color={config.color}>{config.text}</Tag>
-        {isPolling && <Spin size="small" />}
-      </Space>
-    );
-  };
+        <Row gutter={16}>
+          <Col span={12}>
+            <Form.Item
+              name="branch"
+              label="Branch"
+              tooltip="Git branch to use"
+            >
+              <Input placeholder="main" />
+            </Form.Item>
+          </Col>
+          <Col span={12}>
+            <Form.Item
+              name="entry_point"
+              label="Entry Point"
+              tooltip="Python file to execute (e.g., main.py, src/main.py, jobs/data_processor.py)"
+            >
+              <Input placeholder="main.py" />
+            </Form.Item>
+          </Col>
+        </Row>
 
-  // 获取任务类型显示名称
-  const getJobTypeName = (jobType) => {
-    const typeNames = {
-      'simple_job': '简单计算',
-      'data_processing': '数据处理',
-      'machine_learning': '机器学习'
-    };
-    return typeNames[jobType] || jobType;
-  };
+        {renderValidationResult()}
 
-  // 渲染任务历史表格
-  const renderJobHistory = () => {
-    const columns = [
-      {
-        title: '任务ID',
-        dataIndex: 'job_id',
-        key: 'job_id',
-        render: (text) => <Text code>{text}</Text>,
-        ellipsis: true,
-      },
-      {
-        title: '任务类型',
-        dataIndex: 'job_type',
-        key: 'job_type',
-        render: (text) => getJobTypeName(text),
-        width: 120,
-      },
-      {
-        title: '状态',
-        dataIndex: 'status',
-        key: 'status',
-        render: (status, record) => getStatusTag(status, record.job_id),
-        width: 120,
-      },
-      {
-        title: '执行时间',
-        dataIndex: 'execution_time',
-        key: 'execution_time',
-        render: (time) => time ? `${time.toFixed(2)}s` : '-',
-        width: 100,
-      },
-      {
-        title: '创建时间',
-        dataIndex: 'created_at',
-        key: 'created_at',
-        render: (time) => time ? new Date(time).toLocaleString() : '-',
-        width: 160,
-      },
-      {
-        title: '操作',
-        key: 'action',
-        render: (_, record) => (
-          <Space size="middle">
-            <Tooltip title="查看详情">
-              <Button 
-                type="link" 
-                icon={<EyeOutlined />} 
-                onClick={() => handleViewJobDetail(record.job_id)}
-              />
-            </Tooltip>
-          </Space>
-        ),
-        width: 80,
-      },
-    ];
+        <Card title="Job Configuration" size="small" style={{ marginBottom: 16 }}>
+          <Row gutter={16}>
+            <Col span={6}>
+              <Form.Item name={['job_config', 'memory']} label="Memory (MB)">
+                <InputNumber min={512} max={32768} />
+              </Form.Item>
+            </Col>
+            <Col span={6}>
+              <Form.Item name={['job_config', 'cpu']} label="CPU Cores">
+                <InputNumber min={0.5} max={32} step={0.5} />
+              </Form.Item>
+            </Col>
+            <Col span={6}>
+              <Form.Item name={['job_config', 'gpu']} label="GPU Count">
+                <InputNumber min={0} max={8} />
+              </Form.Item>
+            </Col>
+            <Col span={6}>
+              <Form.Item name={['job_config', 'timeout']} label="Timeout (s)">
+                <InputNumber min={60} max={86400} />
+              </Form.Item>
+            </Col>
+          </Row>
+        </Card>
 
-    return (
-      <Card 
-        title={
-          <Space>
-            <HistoryOutlined />
-            任务历史
-          </Space>
-        }
-        extra={
-          <Button 
-            icon={<ReloadOutlined />} 
-            onClick={fetchJobHistory}
-            loading={historyLoading}
+        <Form.Item
+          name="config"
+          label="Job Parameters (JSON)"
+          tooltip="Additional parameters to pass to your code"
+        >
+          <TextArea
+            rows={4}
+            placeholder='{"input_data": "path/to/data.csv", "output_path": "results/"}'
+          />
+        </Form.Item>
+
+        <Form.Item>
+          <Button
+            type="primary"
+            htmlType="submit"
+            loading={submitting}
+            size="large"
+            icon={<PlayCircleOutlined />}
           >
-            刷新
+            Submit Ray Job
           </Button>
-        }
-      >
-        <Table
-          columns={columns}
-          dataSource={jobHistory}
-          rowKey="id"
-          loading={historyLoading}
-          pagination={{
-            pageSize: 10,
-            showSizeChanger: true,
-            showQuickJumper: true,
-            showTotal: (total) => `共 ${total} 条记录`,
-          }}
-        />
-      </Card>
-    );
-  };
+        </Form.Item>
+      </Form>
+    </Card>
+  );
 
-  // 渲染任务详情模态框
-  const renderJobDetailModal = () => {
-    if (!selectedJob) return null;
+  const jobManagementPanel = (
+    <Card
+      title="Ray Jobs"
+      extra={
+        <Button icon={<ReloadOutlined />} onClick={loadJobs}>
+          Refresh
+        </Button>
+      }
+    >
+      <Table
+        columns={columns}
+        dataSource={jobs}
+        rowKey="job_id"
+        loading={loading}
+        pagination={{
+          pageSize: 10,
+          showSizeChanger: true,
+          showTotal: (total, range) =>
+            `${range[0]}-${range[1]} of ${total} jobs`
+        }}
+      />
+    </Card>
+  );
 
-    const isSuccess = selectedJob.status === 'completed';
-    
-    return (
-      <Modal
-        title={
-          <Space>
-            <InfoCircleOutlined />
-            任务详情: {selectedJob.job_id}
-          </Space>
-        }
-        open={jobDetailModal}
-        onCancel={() => setJobDetailModal(false)}
-        footer={[
-          <Button key="close" onClick={() => setJobDetailModal(false)}>
-            关闭
-          </Button>
-        ]}
-        width={800}
-      >
-        <Space direction="vertical" style={{ width: '100%' }}>
-          <Row gutter={16}>
-            <Col span={8}>
-              <Text strong>任务类型: </Text>
-              <Text>{getJobTypeName(selectedJob.job_type)}</Text>
-            </Col>
-            <Col span={8}>
-              <Text strong>状态: </Text>
-              {getStatusTag(selectedJob.status)}
-            </Col>
-            <Col span={8}>
-              <Text strong>执行时间: </Text>
-              <Text>{selectedJob.execution_time ? `${selectedJob.execution_time.toFixed(2)}s` : '-'}</Text>
-            </Col>
-          </Row>
-          
-          <Row gutter={16}>
-            <Col span={12}>
-              <Text strong>创建时间: </Text>
-              <Text>{selectedJob.created_at ? new Date(selectedJob.created_at).toLocaleString() : '-'}</Text>
-            </Col>
-            <Col span={12}>
-              <Text strong>完成时间: </Text>
-              <Text>{selectedJob.completed_at ? new Date(selectedJob.completed_at).toLocaleString() : '-'}</Text>
-            </Col>
-          </Row>
-
-          {selectedJob.parameters && (
-            <div>
-              <Text strong>任务参数:</Text>
-              <pre style={{
-                backgroundColor: '#f5f5f5',
-                padding: '12px',
-                borderRadius: '4px',
-                marginTop: '8px',
-                maxHeight: '200px',
-                overflow: 'auto'
-              }}>
-                {JSON.stringify(selectedJob.parameters, null, 2)}
-              </pre>
-            </div>
-          )}
-
-          {isSuccess && selectedJob.result && (
-            <div>
-              <Text strong>执行结果:</Text>
-              <pre style={{
-                backgroundColor: '#f5f5f5',
-                padding: '12px',
-                borderRadius: '4px',
-                marginTop: '8px',
-                maxHeight: '300px',
-                overflow: 'auto'
-              }}>
-                {JSON.stringify(selectedJob.result, null, 2)}
-              </pre>
-            </div>
-          )}
-
-          {!isSuccess && selectedJob.error_message && (
-            <Alert
-              type="error"
-              message="执行错误"
-              description={selectedJob.error_message}
-              showIcon
-            />
-          )}
-        </Space>
-      </Modal>
-    );
-  };
-
-  useEffect(() => {
-    setLoading(true);
-    Promise.all([
-      fetchClusterStatus(),
-      fetchAvailableJobs(),
-      fetchJobHistory()
-    ]).finally(() => {
-      setLoading(false);
-    });
-  }, []);
+  const tabItems = [
+    {
+      key: 'submit',
+      label: 'Submit Job',
+      children: submitJobForm
+    },
+    {
+      key: 'manage',
+      label: 'Job Management',
+      children: jobManagementPanel
+    }
+  ];
 
   return (
-    <div style={{ padding: '24px' }}>
-      <Space direction="vertical" size="large" style={{ width: '100%' }}>
-        <div>
-          <Title level={2}>
-            <Space>
-              <ThunderboltOutlined />
-              Ray分布式计算
-            </Space>
-          </Title>
-          <Paragraph>
-            Ray是一个开源的分布式计算框架，支持并行计算、机器学习和分布式应用。
-            通过这个界面，你可以提交各种类型的Ray任务并查看执行结果。
-          </Paragraph>
-        </div>
-
-        {loading ? (
+    <div style={{ padding: 24 }}>
+      <Row gutter={24} style={{ marginBottom: 24 }}>
+        <Col span={6}>
           <Card>
-            <Spin size="large" style={{ display: 'block', textAlign: 'center', padding: '50px' }} />
+            <Statistic
+              title="Ray Cluster Status"
+              value={clusterStatus.status || 'Unknown'}
+              valueStyle={{ color: clusterStatus.status === 'connected' ? '#3f8600' : '#cf1322' }}
+            />
           </Card>
-        ) : (
-          <Tabs defaultActiveKey="1">
-            <TabPane 
-              tab={
-                <span>
-                  <InfoCircleOutlined />
-                  集群状态
-                </span>
-              } 
-              key="1"
-            >
-              <Space direction="vertical" size="large" style={{ width: '100%' }}>
-                {renderClusterStatus()}
-                {renderQuickTests()}
-              </Space>
-            </TabPane>
-            
-            <TabPane 
-              tab={
-                <span>
-                  <PlayCircleOutlined />
-                  任务提交
-                </span>
-              } 
-              key="2"
-            >
-              <Space direction="vertical" size="large" style={{ width: '100%' }}>
-                {renderJobForm()}
-                {renderJobResult()}
-              </Space>
-            </TabPane>
-            
-            <TabPane 
-              tab={
-                <span>
-                  <HistoryOutlined />
-                  任务历史
-                </span>
-              } 
-              key="3"
-            >
-              {renderJobHistory()}
-            </TabPane>
-          </Tabs>
+        </Col>
+        <Col span={6}>
+          <Card>
+            <Statistic
+              title="Cluster Nodes"
+              value={clusterStatus.nodes || 0}
+            />
+          </Card>
+        </Col>
+        <Col span={6}>
+          <Card>
+            <Statistic
+              title="Active Jobs"
+              value={jobs.filter(job => job.status === 'running').length}
+            />
+          </Card>
+        </Col>
+        <Col span={6}>
+          <Card>
+            <Statistic
+              title="Total Jobs"
+              value={jobs.length}
+            />
+          </Card>
+        </Col>
+      </Row>
+
+      <Tabs 
+        defaultActiveKey="submit" 
+        size="large"
+        items={tabItems}
+      />
+
+      {/* Job Detail Modal */}
+      <Modal
+        title={`Job Detail: ${selectedJob?.job_id?.slice(-8)}`}
+        open={detailModalVisible}
+        onCancel={() => setDetailModalVisible(false)}
+        footer={null}
+        width={800}
+      >
+        {selectedJob && (
+          <div>
+            <Descriptions column={2} bordered>
+              <Descriptions.Item label="Job ID">{selectedJob.job_id}</Descriptions.Item>
+              <Descriptions.Item label="Status">
+                <Tag color={getStatusColor(selectedJob.status)} icon={getStatusIcon(selectedJob.status)}>
+                  {selectedJob.status.toUpperCase()}
+                </Tag>
+              </Descriptions.Item>
+              <Descriptions.Item label="Repository">{selectedJob.github_repo}</Descriptions.Item>
+              <Descriptions.Item label="Branch">{selectedJob.branch}</Descriptions.Item>
+              <Descriptions.Item label="Entry Point">{selectedJob.entry_point}</Descriptions.Item>
+              <Descriptions.Item label="Created">{new Date(selectedJob.created_at).toLocaleString()}</Descriptions.Item>
+              {selectedJob.started_at && (
+                <Descriptions.Item label="Started">{new Date(selectedJob.started_at).toLocaleString()}</Descriptions.Item>
+              )}
+              {selectedJob.completed_at && (
+                <Descriptions.Item label="Completed">{new Date(selectedJob.completed_at).toLocaleString()}</Descriptions.Item>
+              )}
+            </Descriptions>
+
+            {selectedJob.result && (
+              <Card title="Result" style={{ marginTop: 16 }}>
+                <pre style={{ background: '#f5f5f5', padding: 16, borderRadius: 4, overflow: 'auto' }}>
+                  {JSON.stringify(selectedJob.result, null, 2)}
+                </pre>
+              </Card>
+            )}
+
+            {selectedJob.error && (
+              <Alert
+                type="error"
+                message="Job Error"
+                description={selectedJob.error}
+                style={{ marginTop: 16 }}
+              />
+            )}
+          </div>
         )}
-        
-        {renderJobDetailModal()}
-      </Space>
+      </Modal>
     </div>
   );
 };
