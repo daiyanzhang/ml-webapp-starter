@@ -28,14 +28,33 @@ class RayJobService {
   }
 
   /**
-   * 列出Ray作业
+   * 列出Ray作业（统一从数据库获取）
    */
   async listJobs(limit = 10) {
     try {
-      const response = await apiClient.get('/ray/list', {
-        params: { limit }
+      const response = await apiClient.get('/ray/list', { params: { limit } });
+      const jobs = response.data || [];
+
+      // 格式化作业数据，根据job_type添加不同的显示信息
+      const formattedJobs = jobs.map(job => {
+        if (job.job_type === 'notebook') {
+          return {
+            ...job,
+            job_name: job.notebook_path || 'Unknown Notebook',
+            github_repo: `📓 ${job.notebook_path || 'notebook'}`,
+            branch: '-',
+            entry_point: job.notebook_path
+          };
+        } else {
+          // github type job
+          return {
+            ...job,
+            job_name: job.github_repo || 'Unknown Repository'
+          };
+        }
       });
-      return response.data;
+
+      return formattedJobs;
     } catch (error) {
       console.error('List Ray jobs failed:', error);
       throw new Error(error.response?.data?.detail || 'Failed to list jobs');

@@ -44,15 +44,17 @@ class GitHubJobRequest(BaseModel):
 class JobStatus(BaseModel):
     """作业状态"""
     job_id: str
+    job_type: str  # github, notebook
     status: str  # pending, running, completed, failed
     created_at: datetime
     started_at: Optional[datetime] = None
     completed_at: Optional[datetime] = None
     result: Optional[Any] = None
     error: Optional[str] = None
-    github_repo: str
-    branch: str
-    entry_point: str
+    github_repo: Optional[str] = None
+    branch: Optional[str] = None
+    entry_point: Optional[str] = None
+    notebook_path: Optional[str] = None
     ray_job_id: Optional[str] = None  # Ray集群中的作业ID
     dashboard_url: Optional[str] = None  # Ray Dashboard链接
 
@@ -69,6 +71,7 @@ class RayJobService:
         try:
             db_job = RayJob(
                 job_id=job_status.job_id,
+                job_type="github",
                 status=job_status.status,
                 user_id=user_id,
                 github_repo=job_request.github_repo,
@@ -111,6 +114,7 @@ class RayJobService:
         """将数据库记录转换为JobStatus对象"""
         return JobStatus(
             job_id=db_job.job_id,
+            job_type=db_job.job_type,
             status=db_job.status,
             created_at=db_job.created_at,
             started_at=db_job.started_at,
@@ -120,6 +124,7 @@ class RayJobService:
             github_repo=db_job.github_repo,
             branch=db_job.branch,
             entry_point=db_job.entry_point,
+            notebook_path=db_job.notebook_path,
             ray_job_id=db_job.ray_job_id,
             dashboard_url=db_job.dashboard_url
         )
@@ -159,6 +164,7 @@ class RayJobService:
         # 创建作业状态记录
         job_status = JobStatus(
             job_id=job_id,
+            job_type="github",
             status="pending",
             created_at=datetime.now(),
             github_repo=job_request.github_repo,

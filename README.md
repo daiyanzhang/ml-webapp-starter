@@ -201,10 +201,60 @@ cd webapp-starter
 | ⚡ **Ray Dashboard** | http://localhost:8265 | Distributed computing dashboard |
 | 🔄 **Temporal UI** | http://localhost:8080 | Workflow management |
 | 📚 **Storybook** | http://localhost:6006 | Component library |
+| 📓 **Jupyter Lab** | http://localhost:8888 | Data science notebook environment |
 
 All of the above tools can also be accessed directly from the Developer Tools menu in the frontend application.
 
-### 3. Development Dashboard
+### 3. Default Login Credentials
+
+```
+Username: admin
+Password: admin123
+```
+
+**⚠️ Change these credentials in production!**
+
+### 📓 Jupyter Notebook Integration
+
+Built-in **Jupyter Notebook system** with **Ray distributed execution** for data science and ML development.
+
+#### Execution Options
+
+| Method | Use Case | Access |
+|--------|----------|---------|
+| **Local Jupyter** | Development, small data | Standard Jupyter execution |
+| **Ray Distributed** | Production, large datasets | Click 🚀 button in frontend |
+
+#### Example Notebook
+
+```python
+# Cell 1: Install dependencies
+!pip install pandas --quiet
+
+# Cell 2: Your analysis
+import pandas as pd
+
+# Create sample dataset
+data = {
+    'name': ['Alice', 'Bob', 'Charlie', 'David'],
+    'age': [25, 30, 35, 28],
+    'score': [85, 92, 78, 88]
+}
+
+df = pd.DataFrame(data)
+print("Sample Dataset:")
+print(df)
+print(f"\nAverage age: {df['age'].mean():.1f}")
+print(f"Average score: {df['score'].mean():.1f}")
+```
+
+#### Ray Benefits
+- **🚀 Scalability**: Multi-machine execution  
+- **📊 Monitoring**: Real-time status in Ray Dashboard
+- **💾 Large Data**: Handle datasets > single machine memory
+- **🔄 Parallel**: Multiple notebooks simultaneously
+
+### 4. Development Dashboard
 
 ```bash
 # Launch 4-quadrant development logs (requires iTerm2)

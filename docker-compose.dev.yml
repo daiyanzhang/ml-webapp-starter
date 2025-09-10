@@ -122,16 +122,19 @@ services:
   # Ray Head Node - 分布式计算集群头节点
   ray-head:
     image: rayproject/ray:2.30.0-py39
+    user: root
     ports:
       - "8265:8265"   # Ray Dashboard
       - "10001:10001" # Ray Client Server
       - "5679:5679"   # Ray Job Debug Port
-    volumes:
-      - ./ray-jobs:/app/ray-jobs
     environment:
       - RAY_HEAD_SERVICE_HOST=ray-head
     command: >
       bash -c "
+        apt-get update && apt-get install -y git &&
+        git clone https://github.com/daiyanzhang/ml-webapp-starter.git /tmp/repo &&
+        mkdir -p /app &&
+        cp -r /tmp/repo/ray-jobs /app/ray-jobs &&
         ray start --head --dashboard-host=0.0.0.0 --dashboard-port=8265 --port=6379 --temp-dir=/tmp/ray --disable-usage-stats &&
         sleep infinity
       "
@@ -144,12 +147,15 @@ services:
   # Ray Worker Node - 分布式计算工作节点（可选）
   ray-worker:
     image: rayproject/ray:2.30.0-py39
-    volumes:
-      - ./ray-jobs:/app/ray-jobs
+    user: root
     environment:
       - RAY_HEAD_SERVICE_HOST=ray-head
     command: >
       bash -c "
+        apt-get update && apt-get install -y git &&
+        git clone https://github.com/daiyanzhang/ml-webapp-starter.git /tmp/repo &&
+        mkdir -p /app &&
+        cp -r /tmp/repo/ray-jobs /app/ray-jobs &&
         ray start --address=ray-head:6379 --temp-dir=/tmp/ray --disable-usage-stats &&
         sleep infinity
       "

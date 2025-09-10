@@ -42,6 +42,36 @@ const notebookService = {
     return response.data;
   },
 
+  // 在Ray集群上执行 notebook
+  async executeNotebookOnRay(path) {
+    const response = await api.post(`/notebooks/${path}/execute-on-ray`);
+    return response.data;
+  },
+
+  // 获取Ray任务列表
+  async getRayJobs() {
+    const response = await api.get('/notebooks/ray/jobs');
+    return response.data;
+  },
+
+  // 获取Ray任务状态
+  async getRayJobStatus(jobId) {
+    const response = await api.get(`/notebooks/ray/jobs/${jobId}`);
+    return response.data;
+  },
+
+  // 取消Ray任务
+  async cancelRayJob(jobId) {
+    const response = await api.delete(`/notebooks/ray/jobs/${jobId}`);
+    return response.data;
+  },
+
+  // 获取Ray集群状态
+  async getRayClusterStatus() {
+    const response = await api.get('/notebooks/ray/cluster/status');
+    return response.data;
+  },
+
   // 获取 Jupyter 服务器状态
   async getServerStatus() {
     const response = await api.get('/notebooks/server/status');

@@ -31,6 +31,8 @@ const { Title, Text } = Typography;
 const NotebooksPage = () => {
   const [notebooks, setNotebooks] = useState([]);
   const [serverStatus, setServerStatus] = useState({});
+  const [rayClusterStatus, setRayClusterStatus] = useState({});
+  const [rayJobs, setRayJobs] = useState([]);
   const [loading, setLoading] = useState(false);
   const [createModalVisible, setCreateModalVisible] = useState(false);
   const [form] = Form.useForm();
@@ -39,12 +41,16 @@ const NotebooksPage = () => {
   const loadData = async () => {
     setLoading(true);
     try {
-      const [notebooksData, statusData] = await Promise.all([
+      const [notebooksData, statusData, rayStatusData, rayJobsData] = await Promise.all([
         notebookService.getNotebooks(),
-        notebookService.getServerStatus()
+        notebookService.getServerStatus(),
+        notebookService.getRayClusterStatus().catch(() => ({ status: 'unavailable' })),
+        notebookService.getRayJobs().catch(() => [])
       ]);
       setNotebooks(notebooksData);
       setServerStatus(statusData);
+      setRayClusterStatus(rayStatusData);
+      setRayJobs(rayJobsData);
     } catch (error) {
       console.error('Failed to load data:', error);
       message.error('Failed to load notebooks');
@@ -92,6 +98,25 @@ const NotebooksPage = () => {
     } catch (error) {
       console.error('Failed to execute notebook:', error);
       message.error({ content: 'Failed to execute notebook', key: 'execute' });
+    }
+  };
+
+  // 在Ray集群上执行 notebook
+  const handleExecuteNotebookOnRay = async (path) => {
+    try {
+      message.loading({ content: 'Submitting to Ray cluster...', key: 'ray-execute' });
+      const result = await notebookService.executeNotebookOnRay(path);
+      message.success({ 
+        content: `Notebook submitted to Ray cluster (Job ID: ${result.job_id})`, 
+        key: 'ray-execute',
+        duration: 5
+      });
+      // 刷新Ray任务列表
+      const rayJobsData = await notebookService.getRayJobs();
+      setRayJobs(rayJobsData);
+    } catch (error) {
+      console.error('Failed to execute on Ray:', error);
+      message.error({ content: 'Failed to execute on Ray cluster', key: 'ray-execute' });
     }
   };
 
@@ -150,6 +175,13 @@ const NotebooksPage = () => {
               onClick={() => handleExecuteNotebook(record.path)}
             />
           </Tooltip>
+          <Tooltip title="Execute on Ray Cluster">
+            <Button
+              icon={<RocketOutlined />}
+              onClick={() => handleExecuteNotebookOnRay(record.path)}
+              style={{ color: '#722ed1' }}
+            />
+          </Tooltip>
           <Popconfirm
             title="Are you sure to delete this notebook?"
             onConfirm={() => handleDeleteNotebook(record.path)}
@@ -177,7 +209,7 @@ const NotebooksPage = () => {
 
       {/* 状态卡片 */}
       <Row gutter={16} style={{ marginBottom: '24px' }}>
-        <Col span={8}>
+        <Col span={6}>
           <Card>
             <Statistic
               title="Jupyter Server"
@@ -189,7 +221,19 @@ const NotebooksPage = () => {
             />
           </Card>
         </Col>
-        <Col span={8}>
+        <Col span={6}>
+          <Card>
+            <Statistic
+              title="Ray Cluster"
+              value={rayClusterStatus.status || 'Unknown'}
+              valueStyle={{
+                color: rayClusterStatus.status === 'available' ? '#3f8600' : '#cf1322',
+              }}
+              prefix={rayClusterStatus.status === 'available' ? '🟢' : '🔴'}
+            />
+          </Card>
+        </Col>
+        <Col span={6}>
           <Card>
             <Statistic
               title="Total Notebooks"
@@ -198,16 +242,16 @@ const NotebooksPage = () => {
             />
           </Card>
         </Col>
-        <Col span={8}>
+        <Col span={6}>
           <Card>
             <Statistic
-              title="Jupyter URL"
-              value="localhost:8888"
-              prefix={<LinkOutlined />}
+              title="Ray Jobs"
+              value={rayJobs.length}
+              prefix={<RocketOutlined />}
               formatter={(value) => (
                 <Button
                   type="link"
-                  onClick={() => window.open(notebookService.getJupyterUrl(), '_blank')}
+                  onClick={() => rayClusterStatus.dashboard_url && window.open(rayClusterStatus.dashboard_url, '_blank')}
                   style={{ padding: 0, height: 'auto' }}
                 >
                   {value}

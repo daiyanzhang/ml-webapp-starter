@@ -4,12 +4,19 @@ Jupyter Notebook API endpoints
 import os
 import json
 import requests
+import tempfile
+import uuid
 from typing import List, Dict, Any, Optional
+from datetime import datetime
 from fastapi import APIRouter, HTTPException, Depends
 from pydantic import BaseModel
+import ray
+from ray.job_submission import JobSubmissionClient
+from sqlalchemy.orm import Session
 
 from app.api.deps import get_current_user
-from app.db.models import User as UserModel
+from app.db.models import User as UserModel, RayJob
+from app.core.database import SessionLocal
 
 router = APIRouter()
 
@@ -17,6 +24,10 @@ router = APIRouter()
 JUPYTER_BASE_URL = "http://jupyter:8888"
 JUPYTER_TOKEN = "webapp-starter-token"
 NOTEBOOKS_DIR = "/home/jovyan/work"
+
+# Ray cluster configuration
+RAY_HEAD_URL = "http://ray-head:8265"
+RAY_CLIENT_URL = "ray://ray-head:10001"
 
 
 class NotebookCreate(BaseModel):
@@ -34,6 +45,29 @@ def get_jupyter_headers():
         "Authorization": f"token {JUPYTER_TOKEN}",
         "Content-Type": "application/json"
     }
+
+
+def _create_notebook_ray_job(job_id: str, notebook_path: str, user_id: int, ray_job_id: str = None) -> None:
+    """创建notebook Ray作业数据库记录"""
+    db = SessionLocal()
+    try:
+        db_job = RayJob(
+            job_id=job_id,
+            job_type="notebook",
+            status="pending",
+            user_id=user_id,
+            notebook_path=notebook_path,
+            ray_job_id=ray_job_id,
+            dashboard_url=f"{RAY_HEAD_URL}/jobs/{ray_job_id}" if ray_job_id else None,
+            created_at=datetime.now()
+        )
+        db.add(db_job)
+        db.commit()
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=500, detail=f"Failed to create job record: {str(e)}")
+    finally:
+        db.close()
 
 
 @router.get("/")
@@ -173,6 +207,152 @@ async def get_server_status(
             "url": JUPYTER_BASE_URL,
             "error": "Cannot connect to Jupyter server"
         }
+
+
+@router.get("/ray/cluster/status")
+async def get_ray_cluster_status(
+    current_user: UserModel = Depends(get_current_user)
+) -> Dict[str, Any]:
+    """获取Ray集群状态"""
+    try:
+        # 检查Ray Dashboard是否可访问（简单检查主页）
+        response = requests.get(f"{RAY_HEAD_URL}", timeout=5)
+        response.raise_for_status()
+        
+        # 尝试连接Ray Job API
+        job_client = JobSubmissionClient(RAY_HEAD_URL)
+        jobs = job_client.list_jobs()
+        
+        return {
+            "status": "available",
+            "total_jobs": len(jobs),
+            "dashboard_url": RAY_HEAD_URL,
+            "client_url": RAY_CLIENT_URL
+        }
+        
+    except Exception as e:
+        return {
+            "status": "unavailable",
+            "error": f"Cannot connect to Ray cluster: {str(e)}",
+            "dashboard_url": RAY_HEAD_URL
+        }
+
+
+
+
+@router.get("/ray/jobs/{job_id}")
+async def get_ray_job_status(
+    job_id: str,
+    current_user: UserModel = Depends(get_current_user)
+) -> Dict[str, Any]:
+    """获取指定Ray任务的状态和日志"""
+    try:
+        client = JobSubmissionClient(RAY_HEAD_URL)
+        
+        # 获取任务信息
+        job_info = client.get_job_info(job_id)
+        
+        # 获取任务日志
+        logs = client.get_job_logs(job_id)
+        
+        return {
+            "job_id": job_id,
+            "status": job_info.status.value,
+            "start_time": job_info.start_time,
+            "end_time": job_info.end_time,
+            "metadata": job_info.metadata,
+            "logs": logs,
+            "dashboard_url": f"{RAY_HEAD_URL}/jobs/{job_id}"
+        }
+        
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to fetch job status: {str(e)}")
+
+
+@router.delete("/ray/jobs/{job_id}")
+async def cancel_ray_job(
+    job_id: str,
+    current_user: UserModel = Depends(get_current_user)
+) -> Dict[str, Any]:
+    """取消Ray任务"""
+    try:
+        client = JobSubmissionClient(RAY_HEAD_URL)
+        client.stop_job(job_id)
+        
+        return {
+            "job_id": job_id,
+            "status": "cancelled",
+            "message": "Job cancellation requested"
+        }
+        
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to cancel job: {str(e)}")
+
+
+@router.post("/{notebook_path:path}/execute-on-ray")
+async def execute_notebook_on_ray(
+    notebook_path: str,
+    current_user: UserModel = Depends(get_current_user)
+) -> Dict[str, Any]:
+    """在Ray集群上执行notebook"""
+    try:
+        # 连接到Ray集群
+        client = JobSubmissionClient(RAY_HEAD_URL)
+        
+        # 生成唯一的job ID
+        job_name = f"notebook-{uuid.uuid4().hex[:8]}"
+        
+        # 准备Ray job配置
+        runtime_env = {
+            "working_dir": "./ray-jobs",
+            "pip": [
+                "jupyter==1.0.0",
+                "nbformat==5.9.2", 
+                "nbconvert==7.11.0",
+                "ipykernel==6.26.0",
+                "requests==2.31.0"
+            ]
+        }
+        
+        # 设置环境变量
+        env_vars = {
+            "NOTEBOOK_PATH": notebook_path,
+            "JUPYTER_BASE_URL": JUPYTER_BASE_URL,
+            "JUPYTER_TOKEN": JUPYTER_TOKEN,
+            "RAY_JOB_ID": job_name,  # 设置job_id供ray_job_decorator使用
+            "RAY_SUBMISSION_ID": job_name
+        }
+        
+        # 将环境变量添加到runtime_env中
+        runtime_env["env_vars"] = env_vars
+        
+        # 提交Ray job - 使用ray-jobs目录中的脚本
+        ray_job_id = client.submit_job(
+            entrypoint="python notebook_executor.py",
+            runtime_env=runtime_env,
+            submission_id=job_name,  # 使用submission_id而不是job_id
+            metadata={"notebook_path": notebook_path, "user": current_user.username}
+        )
+        
+        # 保存作业到数据库
+        _create_notebook_ray_job(
+            job_id=job_name,
+            notebook_path=notebook_path,
+            user_id=current_user.id,
+            ray_job_id=ray_job_id
+        )
+        
+        return {
+            "job_id": ray_job_id,
+            "job_name": job_name,
+            "notebook_path": notebook_path,
+            "status": "submitted",
+            "ray_dashboard": f"{RAY_HEAD_URL}/jobs/{ray_job_id}",
+            "message": "Notebook submitted for execution on Ray cluster"
+        }
+        
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to execute on Ray: {str(e)}")
 
 
 @router.get("/{notebook_path:path}")
@@ -325,5 +505,7 @@ async def execute_notebook(
         
     except requests.RequestException as e:
         raise HTTPException(status_code=500, detail=f"Failed to execute notebook: {str(e)}")
+
+
 
 

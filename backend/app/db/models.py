@@ -25,14 +25,18 @@ class RayJob(Base):
     
     id = Column(Integer, primary_key=True, index=True)
     job_id = Column(String, unique=True, index=True, nullable=False)
+    job_type = Column(String, nullable=False)  # github, notebook
     status = Column(String, nullable=False)  # pending, running, completed, failed
     user_id = Column(Integer, nullable=True)  # 可选：记录提交任务的用户
     
-    # GitHub集成字段
-    github_repo = Column(String, nullable=False)
-    branch = Column(String, nullable=False)
-    entry_point = Column(String, nullable=False)
+    # GitHub集成字段 (nullable for notebook jobs)
+    github_repo = Column(String, nullable=True)
+    branch = Column(String, nullable=True)
+    entry_point = Column(String, nullable=True)
     template_type = Column(String, nullable=True)
+    
+    # Notebook集成字段 (nullable for github jobs)
+    notebook_path = Column(String, nullable=True)
     
     # Ray相关字段
     ray_job_id = Column(String, nullable=True)  # Ray集群中的作业ID
