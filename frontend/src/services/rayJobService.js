@@ -120,6 +120,19 @@ class RayJobService {
   }
 
   /**
+   * 获取可用的队列列表
+   */
+  async getQueues() {
+    try {
+      const response = await apiClient.get('/ray/queues');
+      return response.data;
+    } catch (error) {
+      console.error('Get Ray queues failed:', error);
+      throw new Error(error.response?.data?.detail || 'Failed to get queues');
+    }
+  }
+
+  /**
    * 获取示例仓库
    */
   async getExamples() {

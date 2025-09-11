@@ -36,6 +36,7 @@ class GitHubJobRequest(BaseModel):
     github_repo: str  # username/repo或完整URL
     branch: str = "main"
     entry_point: str = "main.py"
+    queue: str = "default"  # 队列选择: default, gpu
     commit_sha: Optional[str] = None
     config: Dict[str, Any] = {}
     job_config: JobConfig = JobConfig()
@@ -45,6 +46,7 @@ class JobStatus(BaseModel):
     """作业状态"""
     job_id: str
     job_type: str  # github, notebook
+    queue: str  # default, gpu
     status: str  # pending, running, completed, failed
     created_at: datetime
     started_at: Optional[datetime] = None
@@ -72,6 +74,7 @@ class RayJobService:
             db_job = RayJob(
                 job_id=job_status.job_id,
                 job_type="github",
+                queue=job_request.queue,
                 status=job_status.status,
                 user_id=user_id,
                 github_repo=job_request.github_repo,
@@ -115,6 +118,7 @@ class RayJobService:
         return JobStatus(
             job_id=db_job.job_id,
             job_type=db_job.job_type,
+            queue=db_job.queue,
             status=db_job.status,
             created_at=db_job.created_at,
             started_at=db_job.started_at,
@@ -165,6 +169,7 @@ class RayJobService:
         job_status = JobStatus(
             job_id=job_id,
             job_type="github",
+            queue=job_request.queue,
             status="pending",
             created_at=datetime.now(),
             github_repo=job_request.github_repo,
@@ -197,6 +202,7 @@ class RayJobService:
             # 执行作业并获取Ray job ID - 直接传递 GitHub 仓库信息
             result, ray_job_id = await self._execute_ray_job(
                 job_id=job_id,
+                queue=job_request.queue,
                 github_repo=job_request.github_repo,
                 branch=job_request.branch,
                 commit_sha=job_request.commit_sha,
@@ -223,6 +229,7 @@ class RayJobService:
     async def _execute_ray_job(
         self,
         job_id: str,
+        queue: str,
         github_repo: str,
         branch: str,
         commit_sha: str,
@@ -232,20 +239,18 @@ class RayJobService:
     ) -> tuple[Any, Optional[str]]:
         """执行Ray作业 - 使用通用的 GitHub job runner"""
         
-        # 构建运行时环境 - 回到原来的 working_dir 方式
+        # 构建运行时环境 - 使用Ray的Git集成
         runtime_env = {
-            "working_dir": "/app/ray-jobs"  # 使用容器内的挂载路径
+            "working_dir": github_repo,
+            "pip": "./requirements.txt"  # 安装Git仓库根目录下的requirements.txt
         }
         
-        # 设置环境变量传递 GitHub 仓库信息和任务配置
+        # 设置环境变量传递任务配置和监控信息
         runtime_env["env_vars"] = {
             "RAY_JOB_CONFIG": json.dumps(config),
             "RAY_JOB_ID": job_id,
             "RAY_JOB_TYPE": "github_job",
-            "GITHUB_REPO": github_repo,
-            "GITHUB_BRANCH": branch,
-            "ENTRY_POINT": entry_point,
-            "PYTHONPATH": "./ray-jobs:$PYTHONPATH"
+            "ENTRY_POINT": entry_point,  # 传递用户代码入口点
         }
         
         # 如果指定了 commit，添加到环境变量
@@ -257,7 +262,7 @@ class RayJobService:
             # 连接到Ray集群
             client = JobSubmissionClient("http://ray-head:8265")
             
-            # 使用通用的 GitHub job runner
+            # 使用github_job_runner执行用户代码，Ray已自动处理Git仓库
             entrypoint = "python github_job_runner.py"
             
             # 异步提交job
@@ -267,7 +272,7 @@ class RayJobService:
                 lambda: client.submit_job(
                     entrypoint=entrypoint,
                     runtime_env=runtime_env,
-                    metadata={"internal_job_id": job_id}
+                    metadata={"internal_job_id": job_id, "queue": queue}
                 )
             )
             

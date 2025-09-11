@@ -14,9 +14,14 @@ import ast
 import re
 
 
+import logging
+
+# 配置logging
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
+
 def log_info(message):
     """统一的日志输出函数"""
-    print(f"[NOTEBOOK-EXECUTOR] {message}")
+    logging.info(f"[NOTEBOOK-EXECUTOR] {message}")
 
 
 @ray_job_monitor(api_base_url="http://backend:8000")

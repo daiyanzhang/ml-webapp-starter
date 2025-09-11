@@ -32,7 +32,6 @@ const NotebooksPage = () => {
   const [notebooks, setNotebooks] = useState([]);
   const [serverStatus, setServerStatus] = useState({});
   const [rayClusterStatus, setRayClusterStatus] = useState({});
-  const [rayJobs, setRayJobs] = useState([]);
   const [loading, setLoading] = useState(false);
   const [createModalVisible, setCreateModalVisible] = useState(false);
   const [form] = Form.useForm();
@@ -44,13 +43,11 @@ const NotebooksPage = () => {
       const [notebooksData, statusData, rayStatusData, rayJobsData] = await Promise.all([
         notebookService.getNotebooks(),
         notebookService.getServerStatus(),
-        notebookService.getRayClusterStatus().catch(() => ({ status: 'unavailable' })),
-        notebookService.getRayJobs().catch(() => [])
+        notebookService.getRayClusterStatus().catch(() => ({ status: 'unavailable' }))
       ]);
       setNotebooks(notebooksData);
       setServerStatus(statusData);
       setRayClusterStatus(rayStatusData);
-      setRayJobs(rayJobsData);
     } catch (error) {
       console.error('Failed to load data:', error);
       message.error('Failed to load notebooks');
@@ -111,9 +108,6 @@ const NotebooksPage = () => {
         key: 'ray-execute',
         duration: 5
       });
-      // 刷新Ray任务列表
-      const rayJobsData = await notebookService.getRayJobs();
-      setRayJobs(rayJobsData);
     } catch (error) {
       console.error('Failed to execute on Ray:', error);
       message.error({ content: 'Failed to execute on Ray cluster', key: 'ray-execute' });
@@ -239,24 +233,6 @@ const NotebooksPage = () => {
               title="Total Notebooks"
               value={notebooks.length}
               prefix={<FileTextOutlined />}
-            />
-          </Card>
-        </Col>
-        <Col span={6}>
-          <Card>
-            <Statistic
-              title="Ray Jobs"
-              value={rayJobs.length}
-              prefix={<RocketOutlined />}
-              formatter={(value) => (
-                <Button
-                  type="link"
-                  onClick={() => rayClusterStatus.dashboard_url && window.open(rayClusterStatus.dashboard_url, '_blank')}
-                  style={{ padding: 0, height: 'auto' }}
-                >
-                  {value}
-                </Button>
-              )}
             />
           </Card>
         </Col>

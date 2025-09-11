@@ -16,7 +16,6 @@ import {
   Descriptions,
   Form,
   Input,
-  InputNumber,
   message,
   Modal,
   Row,
@@ -36,6 +35,7 @@ const RayJobsPage = () => {
   const [form] = Form.useForm();
   const [jobs, setJobs] = useState([]);
   const [templates, setTemplates] = useState({});
+  const [queues, setQueues] = useState({});
   const [clusterStatus, setClusterStatus] = useState({});
   const [loading, setLoading] = useState(false);
   const [submitting, setSubmitting] = useState(false);
@@ -47,6 +47,7 @@ const RayJobsPage = () => {
   useEffect(() => {
     loadJobs();
     loadTemplates();
+    loadQueues();
     loadClusterStatus();
     
     // 定期刷新作业状态
@@ -72,6 +73,15 @@ const RayJobsPage = () => {
       setTemplates(response);
     } catch (error) {
       console.error('Failed to load templates:', error);
+    }
+  };
+
+  const loadQueues = async () => {
+    try {
+      const response = await rayJobService.getQueues();
+      setQueues(response);
+    } catch (error) {
+      console.error('Failed to load queues:', error);
     }
   };
 
@@ -212,6 +222,18 @@ const RayJobsPage = () => {
       )
     },
     {
+      title: 'Queue',
+      dataIndex: 'queue',
+      key: 'queue',
+      render: (queue) => {
+        const queueColors = {
+          default: 'blue',
+          gpu: 'green'
+        };
+        return <Tag color={queueColors[queue] || 'default'}>{queue?.toUpperCase()}</Tag>
+      }
+    },
+    {
       title: 'Created',
       dataIndex: 'created_at',
       key: 'created_at',
@@ -305,6 +327,7 @@ const RayJobsPage = () => {
         onFinish={handleSubmitJob}
         initialValues={{
           template_type: 'custom',
+          queue: 'default',
           branch: 'main',
           entry_point: 'main.py',
           job_config: {
@@ -317,7 +340,7 @@ const RayJobsPage = () => {
         }}
       >
         <Row gutter={16}>
-          <Col span={12}>
+          {/* <Col span={8}>
             <Form.Item
               name="template_type"
               label="Template Type"
@@ -330,8 +353,23 @@ const RayJobsPage = () => {
                 }))}
               />
             </Form.Item>
+          </Col> */}
+          <Col span={8}>
+            <Form.Item
+              name="queue"
+              label="Queue"
+              tooltip="选择执行队列"
+            >
+              <Select 
+                options={Object.entries(queues.queues || {}).map(([key, queue]) => ({
+                  value: key,
+                  label: `${queue.name}`,
+                  tooltip: queue.description
+                }))}
+              />
+            </Form.Item>
           </Col>
-          <Col span={12}>
+          <Col span={8}>
             <Form.Item
               name="github_repo"
               label="GitHub Repository"
@@ -357,7 +395,7 @@ const RayJobsPage = () => {
         </Row>
 
         <Row gutter={16}>
-          <Col span={12}>
+          {/* <Col span={12}>
             <Form.Item
               name="branch"
               label="Branch"
@@ -365,7 +403,7 @@ const RayJobsPage = () => {
             >
               <Input placeholder="main" />
             </Form.Item>
-          </Col>
+          </Col> */}
           <Col span={12}>
             <Form.Item
               name="entry_point"
@@ -379,7 +417,7 @@ const RayJobsPage = () => {
 
         {renderValidationResult()}
 
-        <Card title="Job Configuration" size="small" style={{ marginBottom: 16 }}>
+        {/* <Card title="Job Configuration" size="small" style={{ marginBottom: 16 }}>
           <Row gutter={16}>
             <Col span={6}>
               <Form.Item name={['job_config', 'memory']} label="Memory (MB)">
@@ -402,7 +440,7 @@ const RayJobsPage = () => {
               </Form.Item>
             </Col>
           </Row>
-        </Card>
+        </Card> */}
 
         <Form.Item
           name="config"

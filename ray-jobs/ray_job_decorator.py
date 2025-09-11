@@ -7,10 +7,15 @@ import json
 import os
 import sys
 import traceback
+import socket
+import logging
 from datetime import datetime
 from typing import Dict, Any, Callable
 import requests
 from functools import wraps
+
+# 配置logging
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 
 
 def ray_job_monitor(api_base_url: str = "http://backend:8000"):
@@ -35,12 +40,20 @@ def ray_job_monitor(api_base_url: str = "http://backend:8000"):
             # 从环境变量获取job信息
             job_id = os.environ.get("RAY_JOB_ID", "unknown")
             submission_id = os.environ.get("RAY_SUBMISSION_ID", "unknown")
+            
+            # 获取worker信息
+            worker_queue = os.environ.get("RAY_WORKER_QUEUE", "unknown")
+            worker_type = os.environ.get("RAY_WORKER_TYPE", "unknown") 
+            hostname = socket.gethostname()
 
-            print(f"=== Ray Job Monitor Started ===")
-            print(f"Job ID: {job_id}")
-            print(f"Submission ID: {submission_id}")
-            print(f"Function: {func.__name__}")
-            print(f"Arguments: args={len(args)}, kwargs={list(kwargs.keys())}")
+            logging.info("=== Ray Job Monitor Started ===")
+            logging.info(f"Job ID: {job_id}")
+            logging.info(f"Submission ID: {submission_id}")
+            logging.info(f"Worker Queue: {worker_queue}")
+            logging.info(f"Worker Type: {worker_type}")
+            logging.info(f"Hostname: {hostname}")
+            logging.info(f"Function: {func.__name__}")
+            logging.info(f"Arguments: args={len(args)}, kwargs={list(kwargs.keys())}")
 
             start_time = datetime.now()
 
@@ -66,10 +79,8 @@ def ray_job_monitor(api_base_url: str = "http://backend:8000"):
                     end_time=end_time.isoformat(),
                 )
 
-                print(f"=== Ray Job Monitor Completed ===")
-                print(
-                    f"Job {job_id} completed successfully in {execution_time:.2f} seconds"
-                )
+                logging.info("=== Ray Job Monitor Completed ===")
+                logging.info(f"Job {job_id} completed successfully in {execution_time:.2f} seconds")
                 return result
 
             except Exception as e:
@@ -89,9 +100,9 @@ def ray_job_monitor(api_base_url: str = "http://backend:8000"):
                     end_time=end_time.isoformat(),
                 )
 
-                print(f"=== Ray Job Monitor Failed ===")
-                print(f"Job {job_id} failed after {execution_time:.2f} seconds")
-                print(f"Error: {error_msg}")
+                logging.error("=== Ray Job Monitor Failed ===")
+                logging.error(f"Job {job_id} failed after {execution_time:.2f} seconds")
+                logging.error(f"Error: {error_msg}")
 
                 # 重新抛出异常
                 raise
@@ -134,12 +145,12 @@ def update_job_status(
         )
 
         if response.status_code == 200:
-            print(f"Status updated successfully: {status}")
+            logging.info(f"Status updated successfully: {status}")
         else:
-            print(f"Failed to update status: {response.status_code} - {response.text}")
+            logging.error(f"Failed to update status: {response.status_code} - {response.text}")
 
     except Exception as e:
-        print(f"Error updating job status: {e}")
+        logging.error(f"Error updating job status: {e}")
         # 不抛出异常，避免影响主要的job执行
 
 

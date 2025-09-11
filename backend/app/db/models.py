@@ -26,6 +26,7 @@ class RayJob(Base):
     id = Column(Integer, primary_key=True, index=True)
     job_id = Column(String, unique=True, index=True, nullable=False)
     job_type = Column(String, nullable=False)  # github, notebook
+    queue = Column(String, nullable=False, default="default")  # 队列名称
     status = Column(String, nullable=False)  # pending, running, completed, failed
     user_id = Column(Integer, nullable=True)  # 可选：记录提交任务的用户
     

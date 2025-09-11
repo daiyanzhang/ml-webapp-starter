@@ -20,7 +20,7 @@ A **production-ready full-stack web application starter** designed for **AI mode
 ## ✨ Key Features
 
 ### 🤖 AI/ML Ready Infrastructure
-- **Ray Integration**: Built-in distributed computing framework
+- **Ray Integration**: Built-in distributed computing framework with queue-based resource allocation
 - **Async Processing**: High-performance async API with FastAPI
 - **Workflow Engine**: Temporal for complex pipeline orchestration
 - **Database Support**: PostgreSQL with async ORM

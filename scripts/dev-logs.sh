@@ -51,7 +51,7 @@ tell application "iTerm"
     
     -- 设置Ray会话
     tell raySession
-        write text "cd '$CURRENT_DIR' && echo '⚡ RAY CLUSTER LOGS (Port 8265)' && echo '════════════════════════════════════════════════════════════════════════════════' && docker-compose -f docker-compose.dev.yml logs -f ray-head ray-worker"
+        write text "cd '$CURRENT_DIR' && echo '⚡ RAY CLUSTER LOGS (Port 8265)' && echo '════════════════════════════════════════════════════════════════════════════════' && docker-compose -f docker-compose.dev.yml logs -f ray-head ray-worker-default ray-worker-gpu"
     end tell
     
     -- 选择左侧窗格并水平分割 (Backend)

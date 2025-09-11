@@ -122,6 +122,7 @@ services:
   # Ray Head Node - 分布式计算集群头节点
   ray-head:
     image: rayproject/ray:2.30.0-py39
+    platform: linux/amd64
     user: root
     ports:
       - "8265:8265"   # Ray Dashboard
@@ -131,10 +132,6 @@ services:
       - RAY_HEAD_SERVICE_HOST=ray-head
     command: >
       bash -c "
-        apt-get update && apt-get install -y git &&
-        git clone https://github.com/daiyanzhang/ml-webapp-starter.git /tmp/repo &&
-        mkdir -p /app &&
-        cp -r /tmp/repo/ray-jobs /app/ray-jobs &&
         ray start --head --dashboard-host=0.0.0.0 --dashboard-port=8265 --port=6379 --temp-dir=/tmp/ray --disable-usage-stats &&
         sleep infinity
       "
@@ -144,25 +141,52 @@ services:
       timeout: 10s
       retries: 5
 
-  # Ray Worker Node - 分布式计算工作节点（可选）
-  ray-worker:
+  # Ray Worker Node - Default Queue (CPU)
+  ray-worker-default:
     image: rayproject/ray:2.30.0-py39
+    platform: linux/amd64
     user: root
     environment:
       - RAY_HEAD_SERVICE_HOST=ray-head
+      - RAY_WORKER_QUEUE=default
+      - RAY_WORKER_TYPE=cpu
     command: >
       bash -c "
-        apt-get update && apt-get install -y git &&
-        git clone https://github.com/daiyanzhang/ml-webapp-starter.git /tmp/repo &&
-        mkdir -p /app &&
-        cp -r /tmp/repo/ray-jobs /app/ray-jobs &&
-        ray start --address=ray-head:6379 --temp-dir=/tmp/ray --disable-usage-stats &&
+        ray start --address=ray-head:6379 --temp-dir=/tmp/ray --disable-usage-stats --resources='{\"queue:default\":1,\"cpu_worker\":1}' &&
         sleep infinity
       "
     depends_on:
       ray-head:
         condition: service_healthy
-    scale: 2  # 启动2个worker节点
+    scale: 1  # Default queue worker
+
+  # Ray Worker Node - GPU Queue
+  ray-worker-gpu:
+    image: rayproject/ray:2.30.0-py39
+    # image: rayproject/ray:2.30.0-py39-gpu
+    platform: linux/amd64
+    user: root
+    environment:
+      - RAY_HEAD_SERVICE_HOST=ray-head
+      - RAY_WORKER_QUEUE=gpu
+      - RAY_WORKER_TYPE=gpu
+    # Uncomment below lines if you have NVIDIA GPU and nvidia-docker installed
+    # deploy:
+    #   resources:
+    #     reservations:
+    #       devices:
+    #         - driver: nvidia
+    #           count: 1
+    #           capabilities: [gpu]
+    command: >
+      bash -c "
+        ray start --address=ray-head:6379 --temp-dir=/tmp/ray --disable-usage-stats --resources='{\"queue:gpu\":1,\"gpu_worker\":1}' &&
+        sleep infinity
+      "
+    depends_on:
+      ray-head:
+        condition: service_healthy
+    scale: 1  # GPU queue worker
 
   # Jupyter Notebook 服务
   jupyter:

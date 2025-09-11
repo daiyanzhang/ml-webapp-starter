@@ -47,13 +47,14 @@ def get_jupyter_headers():
     }
 
 
-def _create_notebook_ray_job(job_id: str, notebook_path: str, user_id: int, ray_job_id: str = None) -> None:
+def _create_notebook_ray_job(job_id: str, notebook_path: str, user_id: int, queue: str = "default", ray_job_id: str = None) -> None:
     """创建notebook Ray作业数据库记录"""
     db = SessionLocal()
     try:
         db_job = RayJob(
             job_id=job_id,
             job_type="notebook",
+            queue=queue,
             status="pending",
             user_id=user_id,
             notebook_path=notebook_path,

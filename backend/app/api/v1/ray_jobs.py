@@ -226,6 +226,26 @@ async def update_ray_job_status(update_data: dict):
         raise HTTPException(status_code=500, detail=str(e))
 
 
+@router.get("/queues", response_model=dict)
+async def get_available_queues(current_user: User = Depends(get_current_active_user)):
+    """获取可用的队列列表"""
+    queues = {
+        "default": {
+            "name": "Default Queue",
+            "description": "通用队列，适合CPU密集型任务",
+            "resources": "标准CPU和内存",
+            "max_concurrent": 2
+        },
+        "gpu": {
+            "name": "GPU Queue", 
+            "description": "GPU加速队列，适合机器学习和深度学习任务",
+            "resources": "GPU加速计算资源",
+            "max_concurrent": 1
+        }
+    }
+    return {"queues": queues}
+
+
 @router.get("/examples", response_model=dict)
 async def get_example_repositories(
     current_user: User = Depends(get_current_active_user),
