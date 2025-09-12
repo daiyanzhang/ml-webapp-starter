@@ -1,0 +1,1 @@
+# Simple Ray magic commands for Jupyter notebooks - compatible with all IPython versions

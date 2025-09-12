@@ -39,6 +39,12 @@ class NotebookUpdate(BaseModel):
     content: Dict[str, Any]
 
 
+class CellExecuteRequest(BaseModel):
+    code: str
+    cell_type: str = "code"
+    notebook_path: str = "temp_cell"
+
+
 def get_jupyter_headers():
     """Get headers for Jupyter API requests"""
     return {

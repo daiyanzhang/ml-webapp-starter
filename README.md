@@ -21,6 +21,7 @@ A **production-ready full-stack web application starter** designed for **AI mode
 
 ### 🤖 AI/ML Ready Infrastructure
 - **Ray Integration**: Built-in distributed computing framework with queue-based resource allocation
+- **Jupyter + Ray**: Interactive notebooks with distributed computing magic commands
 - **Async Processing**: High-performance async API with FastAPI
 - **Workflow Engine**: Temporal for complex pipeline orchestration
 - **Database Support**: PostgreSQL with async ORM
@@ -152,6 +153,10 @@ webapp-starter/
 │   ├── ray_job_decorator.py    # Job management utilities
 │   ├── debug_utils.py      # Ray debugging and monitoring tools
 │   └── README.md           # Ray jobs documentation
+├── 📊 notebooks/           # Jupyter notebooks with Ray integration
+│   ├── utils/              # Ray magic commands and utilities
+│   ├── requirements.txt    # Notebook dependencies
+│   └── simple_ray_demo.ipynb # Interactive Ray computing demo
 ├── 🐳 deployment/          # Deployment configurations
 │   ├── docker/             # Docker configurations
 │   └── k8s/               # Kubernetes manifests
