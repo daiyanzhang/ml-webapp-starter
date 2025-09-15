@@ -5,7 +5,6 @@ import {
   PlayCircleOutlined,
   PlusOutlined,
   ReloadOutlined,
-  RocketOutlined
 } from '@ant-design/icons';
 import {
   Button,
@@ -31,7 +30,6 @@ const { Title, Text } = Typography;
 const NotebooksPage = () => {
   const [notebooks, setNotebooks] = useState([]);
   const [serverStatus, setServerStatus] = useState({});
-  const [rayClusterStatus, setRayClusterStatus] = useState({});
   const [loading, setLoading] = useState(false);
   const [createModalVisible, setCreateModalVisible] = useState(false);
   const [form] = Form.useForm();
@@ -40,14 +38,12 @@ const NotebooksPage = () => {
   const loadData = async () => {
     setLoading(true);
     try {
-      const [notebooksData, statusData, rayStatusData, rayJobsData] = await Promise.all([
+      const [notebooksData, statusData] = await Promise.all([
         notebookService.getNotebooks(),
-        notebookService.getServerStatus(),
-        notebookService.getRayClusterStatus().catch(() => ({ status: 'unavailable' }))
+        notebookService.getServerStatus()
       ]);
       setNotebooks(notebooksData);
       setServerStatus(statusData);
-      setRayClusterStatus(rayStatusData);
     } catch (error) {
       console.error('Failed to load data:', error);
       message.error('Failed to load notebooks');
@@ -98,25 +94,10 @@ const NotebooksPage = () => {
     }
   };
 
-  // 在Ray集群上执行 notebook
-  const handleExecuteNotebookOnRay = async (path) => {
-    try {
-      message.loading({ content: 'Submitting to Ray cluster...', key: 'ray-execute' });
-      const result = await notebookService.executeNotebookOnRay(path);
-      message.success({ 
-        content: `Notebook submitted to Ray cluster (Job ID: ${result.job_id})`, 
-        key: 'ray-execute',
-        duration: 5
-      });
-    } catch (error) {
-      console.error('Failed to execute on Ray:', error);
-      message.error({ content: 'Failed to execute on Ray cluster', key: 'ray-execute' });
-    }
-  };
 
   // 在 Jupyter 中打开
-  const handleOpenInJupyter = (path) => {
-    const url = notebookService.getJupyterUrl(path);
+  const handleOpenInJupyter = (record) => {
+    const url = notebookService.getJupyterUrl(record.path, record.full_path);
     window.open(url, '_blank');
   };
 
@@ -160,20 +141,13 @@ const NotebooksPage = () => {
             <Button
               type="primary"
               icon={<LinkOutlined />}
-              onClick={() => handleOpenInJupyter(record.path)}
+              onClick={() => handleOpenInJupyter(record)}
             />
           </Tooltip>
           <Tooltip title="Execute Notebook">
             <Button
               icon={<PlayCircleOutlined />}
               onClick={() => handleExecuteNotebook(record.path)}
-            />
-          </Tooltip>
-          <Tooltip title="Execute on Ray Cluster">
-            <Button
-              icon={<RocketOutlined />}
-              onClick={() => handleExecuteNotebookOnRay(record.path)}
-              style={{ color: '#722ed1' }}
             />
           </Tooltip>
           <Popconfirm
@@ -193,7 +167,7 @@ const NotebooksPage = () => {
     <div style={{ padding: '24px' }}>
       <div style={{ marginBottom: '24px' }}>
         <Title level={2}>
-          <RocketOutlined style={{ marginRight: '8px', color: '#1890ff' }} />
+          <FileTextOutlined style={{ marginRight: '8px', color: '#1890ff' }} />
           Jupyter Notebooks
         </Title>
         <Text type="secondary">
@@ -212,18 +186,6 @@ const NotebooksPage = () => {
                 color: serverStatus.status === 'running' ? '#3f8600' : '#cf1322',
               }}
               prefix={serverStatus.status === 'running' ? '🟢' : '🔴'}
-            />
-          </Card>
-        </Col>
-        <Col span={6}>
-          <Card>
-            <Statistic
-              title="Ray Cluster"
-              value={rayClusterStatus.status || 'Unknown'}
-              valueStyle={{
-                color: rayClusterStatus.status === 'available' ? '#3f8600' : '#cf1322',
-              }}
-              prefix={rayClusterStatus.status === 'available' ? '🟢' : '🔴'}
             />
           </Card>
         </Col>

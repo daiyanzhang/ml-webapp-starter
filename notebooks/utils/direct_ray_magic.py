@@ -87,7 +87,7 @@ class DirectRayMagic(Magics):
             
             # 准备Ray job配置 - 使用当前notebooks目录作为working_dir
             runtime_env = {
-                "working_dir": "./",  # 当前目录（notebooks/）
+                "working_dir": "./",  # 当前目录（比如notebooks/users/user_1）
                 "pip": "./requirements.txt"  # 指向requirements.txt文件路径
             }
             
@@ -102,9 +102,9 @@ class DirectRayMagic(Magics):
             print(f"🚀 Submitting job '{name}' to Ray cluster...")
             print(f"📍 Working dir: ./notebooks (auto-install requirements.txt)")
             
-            # 提交Ray job
+            # 提交Ray job - 使用模块导入方式执行
             job_id = client.submit_job(
-                entrypoint="python utils/cell_executor.py",
+                entrypoint="python -m utils.cell_executor",
                 runtime_env=runtime_env,
                 submission_id=name,
                 metadata={"notebook_path": name, "code_preview": cell[:100]}

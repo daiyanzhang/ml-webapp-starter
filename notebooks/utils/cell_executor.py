@@ -14,7 +14,7 @@ from io import StringIO, BytesIO
 import matplotlib
 matplotlib.use('Agg')  # 使用非交互式后端
 import matplotlib.pyplot as plt
-from ray_job_decorator import ray_job_monitor
+from utils.ray_job_decorator import ray_job_monitor
 
 # 配置日志
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
