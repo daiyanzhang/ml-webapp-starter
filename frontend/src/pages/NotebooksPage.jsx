@@ -1,4 +1,5 @@
 import {
+  CodeOutlined,
   DeleteOutlined,
   EyeOutlined,
   FileTextOutlined,
@@ -117,6 +118,25 @@ const NotebooksPage = () => {
     } catch (error) {
       console.error('Failed to open notebook:', error);
       message.error('Failed to open notebook');
+    }
+  };
+
+  // 打开控制台
+  const handleOpenTerminal = async () => {
+    try {
+      // 确保用户session正在运行
+      if (!isSessionRunning) {
+        message.warning('Please start Jupyter session first');
+        return;
+      }
+
+      // 打开JupyterHub的terminal页面，会自动启动终端并cd到work目录
+      const terminalUrl = `http://localhost:8001/user/admin/terminals/new`;
+      window.open(terminalUrl, '_blank');
+      message.success('Opening terminal in JupyterHub');
+    } catch (error) {
+      console.error('Failed to open terminal:', error);
+      message.error('Failed to open terminal');
     }
   };
 
@@ -246,15 +266,17 @@ const NotebooksPage = () => {
           </Card>
         </Col>
         {isSessionRunning && (
-          <Col span={8}>
-            <Card>
-              <Statistic
-                title="Total Notebooks"
-                value={notebooks.length}
-                prefix={<FileTextOutlined />}
-              />
-            </Card>
-          </Col>
+          <>
+            <Col span={8}>
+              <Card>
+                <Statistic
+                  title="Total Notebooks"
+                  value={notebooks.length}
+                  prefix={<FileTextOutlined />}
+                />
+              </Card>
+            </Col>
+          </>
         )}
       </Row>
 
@@ -302,6 +324,12 @@ const NotebooksPage = () => {
                 onClick={handleOpenJupyterHub}
               >
                 Open JupyterHub
+              </Button>
+              <Button
+                icon={<CodeOutlined />}
+                onClick={handleOpenTerminal}
+              >
+                Open Terminal
               </Button>
               <Button
                 danger

@@ -176,18 +176,22 @@ webapp-starter/
 - **[Node.js 18+](https://nodejs.org/)** - For local frontend development (optional)
 - **[Python 3.11+](https://www.python.org/)** - For local backend development (optional)
 
-### 1. Clone and Start
+### 1. Clone and Setup
 
 ```bash
 # Clone the repository
 git clone https://github.com/your-username/webapp-starter.git
 cd webapp-starter
 
+# Build optimized Docker images (recommended)
+./build-images.sh
+
 # Start all services with one command
 ./scripts/dev-start.sh
 ```
 
 **What happens:**
+- 🏗️ Builds optimized Jupyter image with pre-installed dependencies
 - 🐳 Starts all Docker containers
 - 🗄️ Initializes PostgreSQL database
 - ⚡ Launches Ray cluster
@@ -206,7 +210,7 @@ cd webapp-starter
 | ⚡ **Ray Dashboard** | http://localhost:8265 | Distributed computing dashboard |
 | 🔄 **Temporal UI** | http://localhost:8080 | Workflow management |
 | 📚 **Storybook** | http://localhost:6006 | Component library |
-| 📓 **Jupyter Lab** | http://localhost:8888 | Data science notebook environment |
+| 📓 **Jupyter Notebooks** | http://localhost:3000 (click "Open Notebook") | Integrated notebooks with Ray support |
 
 All of the above tools can also be accessed directly from the Developer Tools menu in the frontend application.
 

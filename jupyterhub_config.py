@@ -11,8 +11,8 @@ c.JupyterHub.db_url = 'postgresql://postgres:postgres@postgres:5432/jupyterhub'
 # Docker spawner configuration
 c.JupyterHub.spawner_class = 'dockerspawner.DockerSpawner'
 
-# Docker spawner settings
-c.DockerSpawner.image = 'jupyter/minimal-notebook:latest'
+# Docker spawner settings - use custom image with pre-installed dependencies
+c.DockerSpawner.image = 'webapp-starter-jupyter:latest'
 c.DockerSpawner.remove = False
 c.DockerSpawner.network_name = 'webapp-starter_default'
 
@@ -32,20 +32,14 @@ c.DockerSpawner.extra_host_config = {
     'mem_limit': '2g'
 }
 
-# Set environment variable to auto-install utils package
+# Environment variables for Jupyter
 c.DockerSpawner.environment = {
     'JUPYTER_ENABLE_LAB': 'yes',
-    'SETUP_UTILS_PACKAGE': 'true'
+    'SHELL': '/bin/bash'
 }
 
-# Custom startup command to install utils package and requirements
-c.DockerSpawner.cmd = ['bash', '-c', '''
-if [ "$SETUP_UTILS_PACKAGE" = "true" ]; then
-    cd /home/jovyan/work && pip install -r requirements.txt 2>/dev/null || echo "Warning: Failed to install requirements.txt"
-    cd /home/jovyan/work && pip install -e . 2>/dev/null || echo "Warning: Failed to install utils package"
-fi
-exec start-notebook.sh --NotebookApp.token="" --NotebookApp.password=""
-''']
+# Use default command from custom image (dependencies already installed)
+# c.DockerSpawner.cmd is not needed since the image has the right defaults
 
 # Hub service configuration
 c.JupyterHub.services = [
@@ -62,8 +56,14 @@ c.JupyterHub.api_tokens = {
     'webapp-starter-hub-api-token': 'webapp-starter-api'
 }
 
-# Use null authenticator for development (no authentication required)
-c.JupyterHub.authenticator_class = 'jupyterhub.auth.NullAuthenticator'
+# Use dummy authenticator with fixed password for development
+c.JupyterHub.authenticator_class = 'jupyterhub.auth.DummyAuthenticator'
+
+# Simple password for all users in development
+c.DummyAuthenticator.password = 'admin'
+
+# Allow any user to access (create users automatically)
+c.Authenticator.allow_all = True
 
 # Admin users
 c.Authenticator.admin_users = {'admin', 'webapp-starter-api'}
