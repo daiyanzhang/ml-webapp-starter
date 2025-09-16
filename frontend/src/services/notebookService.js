@@ -36,30 +36,36 @@ const notebookService = {
     return response.data;
   },
 
-  // 执行 notebook
-  async executeNotebook(path) {
-    const response = await api.post(`/notebooks/${path}/execute`);
-    return response.data;
-  },
 
 
-  // 获取 Jupyter 服务器状态
+  // 获取 JupyterHub 服务器状态
   async getServerStatus() {
     const response = await api.get('/notebooks/server/status');
     return response.data;
   },
 
-  // 生成 Jupyter URL
-  getJupyterUrl(path = '', fullPath = null) {
-    const baseUrl = 'http://localhost:8888';
-    const token = 'webapp-starter-token';
+  // 启动 JupyterHub 会话
+  async startSession() {
+    const response = await api.post('/notebooks/session/start');
+    return response.data;
+  },
 
-    if (path) {
-      // 如果提供了完整路径，使用完整路径；否则使用相对路径
-      const notebookPath = fullPath || path;
-      return `${baseUrl}/notebooks/${notebookPath}?token=${token}`;
-    }
-    return `${baseUrl}/tree?token=${token}`;
+  // 停止 JupyterHub 会话
+  async stopSession() {
+    const response = await api.delete('/notebooks/session/stop');
+    return response.data;
+  },
+
+  // 获取 JupyterHub URL
+  async getJupyterUrl() {
+    const response = await api.get('/notebooks/session/url');
+    return response.data.url;
+  },
+
+  // 直接打开 JupyterHub (用于新标签页)
+  openJupyterHub() {
+    // 直接打开 JupyterHub 主页
+    window.open('http://localhost:8001', '_blank');
   }
 };
 

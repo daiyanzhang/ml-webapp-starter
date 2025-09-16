@@ -197,28 +197,33 @@ services:
         condition: service_healthy
     scale: 1  # GPU queue worker
 
-  # Jupyter Notebook 服务
-  jupyter:
-    image: jupyter/minimal-notebook:latest
+  # JupyterHub multi-user service
+  jupyterhub:
+    image: jupyterhub/jupyterhub:latest
     ports:
-      - "8888:8888"
+      - "8001:8000"  # JupyterHub main port (avoid conflict with backend)
     volumes:
-      - ./notebooks:/home/jovyan/work
+      - ./jupyterhub_config.py:/srv/jupyterhub/jupyterhub_config.py
+      - /var/run/docker.sock:/var/run/docker.sock:rw
+      - ./notebooks:/srv/jupyterhub/notebooks
     environment:
-      - JUPYTER_ENABLE_LAB=yes
-      - JUPYTER_TOKEN=webapp-starter-token
-      - GRANT_SUDO=yes
-      - RAY_HEAD_HOST=ray-head
-      - RAY_HEAD_PORT=8265
+      - DOCKER_HOST=unix:///var/run/docker.sock
+      - JUPYTERHUB_CRYPT_KEY=your-secret-key-here
     user: root
     command: >
       bash -c "
-        cd /home/jovyan/work && pip install -e . &&
-        pip install -r /home/jovyan/work/requirements.txt &&
-        start-notebook.sh --NotebookApp.token='webapp-starter-token' --NotebookApp.password='' --NotebookApp.allow_root=True --NotebookApp.disable_check_xsrf=True
+        apt-get update &&
+        apt-get install -y docker.io &&
+        pip install dockerspawner psycopg2-binary &&
+        mkdir -p /srv/jupyterhub/notebooks/users &&
+        jupyterhub -f /srv/jupyterhub/jupyterhub_config.py --no-ssl
       "
     depends_on:
-      - ray-head
+      postgres:
+        condition: service_healthy
+      ray-head:
+        condition: service_healthy
 
 volumes:
   postgres_data:
+  jupyterhub-notebooks:
