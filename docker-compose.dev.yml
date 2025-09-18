@@ -132,9 +132,10 @@ services:
       - RAY_HEAD_SERVICE_HOST=ray-head
     volumes:
       - ./notebooks:/home/ray/notebooks
+      - ./sdk:/home/ray/sdk
     command: >
       bash -c "
-        cd /home/ray/notebooks && pip install -e . &&
+        cd /home/ray/sdk && pip install -e . &&
         ray start --head --dashboard-host=0.0.0.0 --dashboard-port=8265 --port=6379 --temp-dir=/tmp/ray --disable-usage-stats &&
         sleep infinity
       "
@@ -155,9 +156,10 @@ services:
       - RAY_WORKER_TYPE=cpu
     volumes:
       - ./notebooks:/home/ray/notebooks
+      - ./sdk:/home/ray/sdk
     command: >
       bash -c "
-        cd /home/ray/notebooks && pip install -e . &&
+        cd /home/ray/sdk && pip install -e . &&
         ray start --address=ray-head:6379 --temp-dir=/tmp/ray --disable-usage-stats --resources='{\"queue:default\":1,\"cpu_worker\":1}' &&
         sleep infinity
       "
@@ -178,6 +180,7 @@ services:
       - RAY_WORKER_TYPE=gpu
     volumes:
       - ./notebooks:/home/ray/notebooks
+      - ./sdk:/home/ray/sdk
     # Uncomment below lines if you have NVIDIA GPU and nvidia-docker installed
     # deploy:
     #   resources:
@@ -188,7 +191,7 @@ services:
     #           capabilities: [gpu]
     command: >
       bash -c "
-        cd /home/ray/notebooks && pip install -e . &&
+        cd /home/ray/sdk && pip install -e . &&
         ray start --address=ray-head:6379 --temp-dir=/tmp/ray --disable-usage-stats --resources='{\"queue:gpu\":1,\"gpu_worker\":1}' &&
         sleep infinity
       "
@@ -206,6 +209,7 @@ services:
       - ./jupyterhub_config.py:/srv/jupyterhub/jupyterhub_config.py
       - /var/run/docker.sock:/var/run/docker.sock:rw
       - ./notebooks:/srv/jupyterhub/notebooks
+      - ./sdk:/srv/jupyterhub/sdk
     environment:
       - DOCKER_HOST=unix:///var/run/docker.sock
       - JUPYTERHUB_CRYPT_KEY=your-secret-key-here

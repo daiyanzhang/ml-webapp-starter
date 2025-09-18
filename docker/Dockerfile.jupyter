@@ -13,16 +13,20 @@ USER $NB_UID
 # 创建工作目录
 WORKDIR /home/jovyan/work
 
-# 复制依赖文件到工作目录
+# 复制SDK目录并设置权限
+COPY sdk /home/jovyan/sdk/
 COPY notebooks/requirements.txt ./requirements.txt
-COPY notebooks/setup.py ./setup.py
-COPY notebooks/utils ./utils/
+
+# 设置SDK目录权限
+USER root
+RUN chown -R $NB_UID:$NB_GID /home/jovyan/sdk
+USER $NB_UID
 
 # 预装依赖包
 RUN pip install --no-cache-dir -r requirements.txt
 
-# 安装utils包到工作目录
-RUN pip install --no-cache-dir -e .
+# 安装SDK包
+RUN pip install --no-cache-dir -e /home/jovyan/sdk
 
 # 配置bash环境，确保终端默认在work目录启动
 RUN echo 'cd /home/jovyan/work' >> /home/jovyan/.bashrc

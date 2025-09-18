@@ -22,6 +22,7 @@ c.JupyterHub.hub_connect_ip = 'jupyterhub'
 # Volume mounts - unified directory with user subdirectories
 c.DockerSpawner.volumes = {
     '/Users/DaiyanZhang/xpeng-project/webapp-starter/notebooks': '/home/jovyan/work',  # 使用相对路径
+    '/Users/DaiyanZhang/xpeng-project/webapp-starter/sdk': '/home/jovyan/sdk',  # SDK目录
 }
 
 # User-specific notebook directory

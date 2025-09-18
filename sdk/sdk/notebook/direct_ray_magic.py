@@ -104,7 +104,7 @@ class DirectRayMagic(Magics):
             
             # 提交Ray job - 使用模块导入方式执行
             job_id = client.submit_job(
-                entrypoint="python -m utils.cell_executor",
+                entrypoint="python -m sdk.notebook.cell_executor",
                 runtime_env=runtime_env,
                 submission_id=name,
                 metadata={"notebook_path": name, "code_preview": cell[:100]}
